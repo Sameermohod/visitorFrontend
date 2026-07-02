@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:5000/api/v1';
+const API_BASE = 'https://visitorbackend-732d.onrender.com/api/v1';
 
 const getHeaders = () => {
   const token = localStorage.getItem('accessToken');
