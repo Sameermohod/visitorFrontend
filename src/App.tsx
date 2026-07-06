@@ -78,6 +78,32 @@ export const App: React.FC = () => {
   const [settingsSuccess, setSettingsSuccess] = useState<string | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
+  // Guard Manual Entry & Verification States
+  const [manualVisitor, setManualVisitor] = useState({
+    name: '',
+    phoneNumber: '',
+    visitorType: 'DELIVERY',
+    company: 'Zomato',
+    vehicleNumber: '',
+    flatId: '',
+    purpose: 'Delivery Check-in',
+    notes: 'Direct entry logged by Guard'
+  });
+  const [manualLoading, setManualLoading] = useState(false);
+  const [manualError, setManualError] = useState<string | null>(null);
+  const [manualSuccess, setManualSuccess] = useState<string | null>(null);
+  const [ownerVerification, setOwnerVerification] = useState<'IDLE' | 'PENDING' | 'APPROVED' | 'REJECTED'>('IDLE');
+  const [verificationFlat, setVerificationFlat] = useState('');
+  const [logSearchQuery, setLogSearchQuery] = useState('');
+
+  // Searchable flat dropdown states
+  const [manualFlatSearch, setManualFlatSearch] = useState('');
+  const [isManualFlatDropdownOpen, setIsManualFlatDropdownOpen] = useState(false);
+  const [selectedManualFlat, setSelectedManualFlat] = useState<any>(null);
+
+  // Resident Pre-Approve Duration selection
+  const [passDuration, setPassDuration] = useState('once');
+
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [chatHistory, setChatHistory] = useState<any[]>([]);
@@ -367,7 +393,7 @@ export const App: React.FC = () => {
       const res = await api.preApproveVisitor({
         ...newVisitor,
         validFrom: new Date().toISOString(),
-        validUntil: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        validUntil: new Date(Date.now() + (passDuration === 'regular' ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000)).toISOString(),
       });
       if (res.success) {
         setNewVisitor({ name: '', phoneNumber: '', visitorType: 'GUEST', vehicleNumber: '', company: '', purpose: 'Friend Visit' });
@@ -535,6 +561,47 @@ export const App: React.FC = () => {
     } catch (e) {
       console.error(e);
     }
+  };
+
+
+  // Guard manual entry check-in action
+  const handleManualEntrySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualVisitor.flatId) {
+      setManualError('Please select a target destination flat.');
+      return;
+    }
+    if (ownerVerification !== 'APPROVED') {
+      setManualError('Please verify entry with flat owner first.');
+      return;
+    }
+    setManualLoading(true);
+    setManualError(null);
+    setManualSuccess(null);
+    try {
+      const res = await api.manualEntry(manualVisitor);
+      if (res.success) {
+        setManualSuccess(`Manual entry checked in successfully for ${manualVisitor.name}!`);
+        setManualVisitor({
+          name: '',
+          phoneNumber: '',
+          visitorType: 'DELIVERY',
+          company: 'Zomato',
+          vehicleNumber: '',
+          flatId: '',
+          purpose: 'Delivery Check-in',
+          notes: 'Direct entry logged by Guard'
+        });
+        setOwnerVerification('IDLE');
+        setVerificationFlat('');
+        loadData();
+      } else {
+        setManualError(res.message || 'Check-in failed');
+      }
+    } catch (err: any) {
+      setManualError(err.message || 'Failed to process manual entry.');
+    }
+    setManualLoading(false);
   };
 
   // Resident deletes/revokes a pass
@@ -1148,29 +1215,268 @@ export const App: React.FC = () => {
                 </div>
 
                 {/* Registry overview */}
-                <div className="glass-panel p-6 rounded-2xl border border-white/5">
-                  <h3 className="text-lg font-bold text-white mb-3">Live Gate Activity Logs</h3>
-                  <div className="flex flex-col gap-3 mt-2 max-h-60 overflow-y-auto">
-                    {visitorLogs.map((log: any) => (
-                      <div key={log.id} className="flex justify-between items-center p-3 bg-white/5 border border-white/5 rounded-xl text-xs">
-                        <div>
-                          <span className="font-bold text-white block">{log.visitor.name}</span>
-                          <span className="text-[10px] text-slate-500">Target Flat: {log.flat.number}</span>
+                <div className="glass-panel p-6 rounded-2xl border border-white/5 flex flex-col">
+                  <h3 className="text-lg font-bold text-white mb-2">Live Gate Activity Logs</h3>
+                  
+                  {/* Quick checkout logs search bar */}
+                  <div className="mb-3">
+                    <input
+                      type="text"
+                      placeholder="Quick exit search (flat, name, rider)..."
+                      value={logSearchQuery}
+                      onChange={(e) => setLogSearchQuery(e.target.value)}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-1.5 text-[11px] text-slate-200 focus:outline-none focus:border-cyan-500/50"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-3 mt-1 max-h-60 overflow-y-auto flex-1">
+                    {visitorLogs
+                      .filter((log: any) => {
+                        if (!logSearchQuery.trim()) return true;
+                        const q = logSearchQuery.toLowerCase();
+                        return (
+                          log.visitor.name.toLowerCase().includes(q) ||
+                          log.flat.number.toLowerCase().includes(q) ||
+                          (log.visitor.company && log.visitor.company.toLowerCase().includes(q))
+                        );
+                      })
+                      .map((log: any) => (
+                        <div key={log.id} className="flex justify-between items-center p-3 bg-white/5 border border-white/5 rounded-xl text-xs">
+                          <div>
+                            <span className="font-bold text-white block">{log.visitor.name}</span>
+                            <span className="text-[10px] text-slate-500">Target Flat: {log.flat.number}</span>
+                          </div>
+                          {log.checkedOutAt ? (
+                            <span className="text-slate-500 font-semibold">Departed</span>
+                          ) : (
+                            <button
+                              onClick={() => handleCheckOutGuest(log.id)}
+                              className="px-3 py-1 bg-rose-500/15 border border-rose-500/20 hover:bg-rose-500/30 text-rose-400 rounded-lg text-[10px] font-bold"
+                            >
+                              Mark Out
+                            </button>
+                          )}
                         </div>
-                        {log.checkedOutAt ? (
-                          <span className="text-slate-500 font-semibold">Departed</span>
-                        ) : (
-                          <button
-                            onClick={() => handleCheckOutGuest(log.id)}
-                            className="px-3 py-1 bg-rose-500/15 border border-rose-500/20 hover:bg-rose-500/30 text-rose-400 rounded-lg text-[10px] font-bold"
-                          >
-                            Mark Out
-                          </button>
-                        )}
-                      </div>
+                      ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Walk-In Manual Entry & Delivery Quick-Check */}
+              <div className="glass-panel p-6 rounded-2xl border border-white/5 bg-slate-900/10">
+                <h3 className="text-lg font-bold text-white mb-2">Walk-In Manual Entry & Delivery Quick-Check</h3>
+                <p className="text-xs text-slate-400 mb-4">Log entries manually for unregistered visitors, delivery riders, and cabs. Verify identity directly with occupants.</p>
+
+                {/* Quick Delivery Boy Chips */}
+                <div className="mb-5">
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">⚡ Quick Autofill Delivery Brands</span>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { name: 'Zomato', type: 'DELIVERY', color: 'border-rose-500/20 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20' },
+                      { name: 'Swiggy', type: 'DELIVERY', color: 'border-orange-500/20 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20' },
+                      { name: 'Uber', type: 'CAB', color: 'border-slate-500/20 bg-slate-500/10 text-slate-300 hover:bg-slate-500/20' },
+                      { name: 'Ola', type: 'CAB', color: 'border-cyan-500/20 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20' },
+                      { name: 'Amazon', type: 'DELIVERY', color: 'border-yellow-500/20 bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20' },
+                    ].map((brand) => (
+                      <button
+                        key={brand.name}
+                        type="button"
+                        onClick={() => {
+                          setManualVisitor({
+                            ...manualVisitor,
+                            name: `${brand.name} Rider`,
+                            visitorType: brand.type,
+                            company: brand.name,
+                            purpose: `${brand.name} Order Delivery`
+                          });
+                        }}
+                        className={`px-3 py-1.5 rounded-xl border text-[11px] font-bold tracking-wide transition-all ${brand.color}`}
+                      >
+                        {brand.name}
+                      </button>
                     ))}
                   </div>
                 </div>
+
+                <form onSubmit={handleManualEntrySubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Visitor Full Name</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Ramesh Patel"
+                        value={manualVisitor.name}
+                        onChange={(e) => setManualVisitor({ ...manualVisitor, name: e.target.value })}
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Phone Number</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. 9876543210"
+                        value={manualVisitor.phoneNumber}
+                        onChange={(e) => setManualVisitor({ ...manualVisitor, phoneNumber: e.target.value })}
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Visitor Type</label>
+                        <select
+                          value={manualVisitor.visitorType}
+                          onChange={(e) => setManualVisitor({ ...manualVisitor, visitorType: e.target.value })}
+                          className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none"
+                        >
+                          <option value="DELIVERY">DELIVERY</option>
+                          <option value="CAB">CAB</option>
+                          <option value="GUEST">GUEST</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Company / Brand</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Zomato"
+                          value={manualVisitor.company}
+                          onChange={(e) => setManualVisitor({ ...manualVisitor, company: e.target.value })}
+                          className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Destination Flat & Owner</label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Search flat number or owner name..."
+                          value={manualFlatSearch}
+                          onFocus={() => setIsManualFlatDropdownOpen(true)}
+                          onChange={(e) => {
+                            setManualFlatSearch(e.target.value);
+                            setIsManualFlatDropdownOpen(true);
+                          }}
+                          className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50"
+                        />
+                        {selectedManualFlat && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedManualFlat(null);
+                              setManualFlatSearch('');
+                              setManualVisitor({ ...manualVisitor, flatId: '' });
+                              setOwnerVerification('IDLE');
+                            }}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs font-bold"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+
+                      {isManualFlatDropdownOpen && (
+                        <div className="absolute z-50 w-full mt-1 bg-slate-950 border border-white/10 rounded-xl max-h-48 overflow-y-auto shadow-2xl divide-y divide-white/5">
+                          {flats
+                            .filter((f: any) => {
+                              const resident = f.residents?.[0];
+                              const residentName = resident ? `${resident.user.firstName} ${resident.user.lastName}`.toLowerCase() : '';
+                              const flatNum = f.number.toLowerCase();
+                              const query = manualFlatSearch.toLowerCase();
+                              return flatNum.includes(query) || residentName.includes(query);
+                            })
+                            .map((f: any) => {
+                              const resident = f.residents?.[0];
+                              const nameStr = resident ? `${resident.user.firstName} ${resident.user.lastName} (${resident.ownershipStatus})` : '';
+                              return (
+                                <div
+                                  key={f.id}
+                                  onClick={() => {
+                                    setSelectedManualFlat(f);
+                                    setManualFlatSearch(nameStr ? `${f.number} - ${nameStr}` : f.number);
+                                    setManualVisitor({ ...manualVisitor, flatId: f.id });
+                                    setIsManualFlatDropdownOpen(false);
+                                    setManualError(null);
+                                    setOwnerVerification('IDLE');
+                                  }}
+                                  className="px-3 py-2 hover:bg-white/5 cursor-pointer text-xs text-slate-200 flex justify-between items-center transition-all"
+                                >
+                                  <span className="font-bold text-white">{f.number}</span>
+                                  <span className="text-[10px] text-slate-400">{nameStr || 'Vacant Flat'}</span>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col justify-between gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Verify with Owner</label>
+                      {selectedManualFlat && selectedManualFlat.residents && selectedManualFlat.residents.length > 0 ? (
+                        ownerVerification === 'IDLE' ? (
+                          <a
+                            href={`tel:${selectedManualFlat.residents[0].user.phoneNumber}`}
+                            onClick={() => {
+                              setOwnerVerification('PENDING');
+                              setVerificationFlat(selectedManualFlat.number);
+                              setTimeout(() => {
+                                setOwnerVerification('APPROVED');
+                              }, 2000);
+                            }}
+                            className="w-full bg-cyan-600/20 border border-cyan-500/30 hover:bg-cyan-600/35 text-cyan-400 font-bold py-2 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 text-center"
+                          >
+                            📞 Call Owner to Verify
+                          </a>
+                        ) : ownerVerification === 'PENDING' ? (
+                          <div className="p-2 bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs rounded-xl flex items-center justify-center gap-2 font-bold animate-pulse">
+                            <span>Calling flat {verificationFlat} occupant...</span>
+                          </div>
+                        ) : (
+                          <div className="p-2 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs rounded-xl flex items-center justify-center gap-1.5 font-extrabold shadow-sm">
+                            <span>✅ Approved by Owner of {verificationFlat}</span>
+                          </div>
+                        )
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          className="w-full bg-slate-900 border border-white/5 text-slate-500 font-bold py-2 rounded-xl text-xs cursor-not-allowed flex items-center justify-center gap-1.5"
+                        >
+                          ⚠️ No Resident Onboarded
+                        </button>
+                      )}
+                    </div>
+
+                    <div>
+                      <button
+                        type="submit"
+                        disabled={manualLoading || ownerVerification !== 'APPROVED'}
+                        className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-1.5"
+                      >
+                        {manualLoading ? 'Checking in...' : 'Approve & Check In'}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+
+                {manualError && (
+                  <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-lg flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    <span>{manualError}</span>
+                  </div>
+                )}
+                {manualSuccess && (
+                  <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-lg flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{manualSuccess}</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1602,6 +1908,31 @@ export const App: React.FC = () => {
                         className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none"
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Pass Duration</label>
+                    <select
+                      value={passDuration}
+                      onChange={(e) => {
+                        setPassDuration(e.target.value);
+                        if (e.target.value === 'regular') {
+                          setNewVisitor({
+                            ...newVisitor,
+                            purpose: 'Regular Daily Pass (Multi-Entry)'
+                          });
+                        } else {
+                          setNewVisitor({
+                            ...newVisitor,
+                            purpose: 'Friend Visit'
+                          });
+                        }
+                      }}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none"
+                    >
+                      <option value="once">Single Entry (24 Hours)</option>
+                      <option value="regular">Regular Daily Pass (30 Days Multi-Entry)</option>
+                    </select>
                   </div>
 
                   <button type="submit" className="w-full mt-2 bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-2.5 rounded-xl text-xs shadow-md">

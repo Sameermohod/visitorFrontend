@@ -379,6 +379,39 @@ export const api = {
     }
   },
 
+  manualEntry: async (entryData: any) => {
+    try {
+      const res = await axios.post(`${API_BASE}/visitors/manual-entry`, entryData, { headers: getHeaders() });
+      return res.data;
+    } catch (e) {
+      // Mock Fallback for local sandbox testing
+      const newVisitorObj = {
+        id: `v${Math.random()}`,
+        name: entryData.name,
+        phoneNumber: entryData.phoneNumber,
+        visitorType: entryData.visitorType,
+        vehicleNumber: entryData.vehicleNumber || 'None',
+        company: entryData.company || 'None',
+        purpose: entryData.purpose || 'Manual Check-in',
+        status: 'IN_SOCIETY',
+        qrCode: `MOCK-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+        validFrom: new Date().toISOString(),
+        validUntil: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      };
+      mockVisitors.unshift(newVisitorObj);
+      const newLog = {
+        id: `vl${Math.random()}`,
+        visitor: newVisitorObj,
+        flat: { number: mockFlats.find(f => f.id === entryData.flatId)?.number || 'A-101' },
+        checkedInAt: new Date().toISOString(),
+        checkedOutAt: null,
+        notes: entryData.notes || 'Checked at gate',
+      };
+      mockVisitorLogs.unshift(newLog);
+      return { success: true, data: newLog };
+    }
+  },
+
   // Complaints Lifecycle
   getComplaints: async (status?: string) => {
     try {
