@@ -486,7 +486,7 @@ export const App: React.FC = () => {
     setScannerError(null);
     setScannedPass(null);
     try {
-      const res = await api.verifyPass(qrCodeInput);
+      const res = await api.verifyPass(qrCodeInput.trim());
       if (res.success) {
         setScannedPass(res.data);
       }
@@ -500,7 +500,7 @@ export const App: React.FC = () => {
     try {
       const res = await api.checkInVisitor({
         visitorId,
-        flatId: 'f101',
+        flatId: scannedPass?.resident?.flatId || '00000000-0000-0000-0000-000000000000',
         notes: 'Checked in at Main Security Gate A',
       });
       if (res.success) {
@@ -1107,7 +1107,7 @@ export const App: React.FC = () => {
                       </div>
                       
                       <div className="flex flex-col gap-2 mt-3 text-xs text-slate-300">
-                        <p><strong>Flat Bound:</strong> A-101 (Resident pre-approved)</p>
+                        <p><strong>Flat Bound:</strong> {scannedPass?.resident?.flat?.number || 'N/A'} (Resident pre-approved)</p>
                         {scannedPass.vehicleNumber && <p><strong>Vehicle Plaque:</strong> {scannedPass.vehicleNumber}</p>}
                         {scannedPass.company && <p><strong>Provider:</strong> {scannedPass.company}</p>}
                       </div>

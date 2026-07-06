@@ -572,6 +572,19 @@ export const api = {
         };
       }
 
+      if (role === 'Security Guard' || role === 'Maintenance Staff') {
+        return {
+          success: true,
+          data: {
+            view: role === 'Security Guard' ? 'GUARD' : 'STAFF',
+            stats: {
+              visitorsTodayCount: mockVisitorLogs.length,
+              openComplaints: mockComplaints.filter(c => c.status === 'OPEN').length,
+            },
+          },
+        };
+      }
+
       return {
         success: true,
         data: {
