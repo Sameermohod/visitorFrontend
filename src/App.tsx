@@ -1947,36 +1947,38 @@ export const App: React.FC = () => {
 
                   {/* Add comment update input (All Roles) */}
                   <div className="mt-2 border-t border-white/5 pt-3">
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <input
                         type="text"
                         placeholder="Add a progress update comment..."
                         value={activeComment[c.id] || ''}
                         onChange={(e) => setActiveComment({ ...activeComment, [c.id]: e.target.value })}
-                        className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-1.5 text-[11px] text-slate-200 focus:outline-none focus:border-emerald-500/50 placeholder-slate-600"
+                        className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-1.5 text-[11px] text-slate-200 focus:outline-none focus:border-emerald-500/50 placeholder-slate-600 min-w-0"
                       />
-                      <button
-                        onClick={() => handlePostComment(c.id)}
-                        className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-[11px] rounded-xl shadow-md transition-all shrink-0"
-                      >
-                        Post Note
-                      </button>
-                      {user?.role === 'Resident' && c.staff && (
-                        <a
-                          href={`tel:${c.staff.phoneNumber || '+919999922222'}`}
-                          className="px-4 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 font-bold text-[11px] rounded-xl shadow-sm transition-all flex items-center gap-1 shrink-0 animate-fadeIn"
+                      <div className="flex gap-2 sm:shrink-0 w-full sm:w-auto justify-end">
+                        <button
+                          onClick={() => handlePostComment(c.id)}
+                          className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-[11px] rounded-xl shadow-md transition-all flex-1 sm:flex-initial"
                         >
-                          📞 Call Staff
-                        </a>
-                      )}
-                      {user?.role !== 'Resident' && c.resident && (
-                        <a
-                          href={`tel:${c.resident.phoneNumber || '+919999911111'}`}
-                          className="px-4 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 font-bold text-[11px] rounded-xl shadow-sm transition-all flex items-center gap-1 shrink-0 animate-fadeIn"
-                        >
-                          📞 Call Owner
-                        </a>
-                      )}
+                          Post Note
+                        </button>
+                        {user?.role === 'Resident' && c.staff && (
+                          <a
+                            href={`tel:${c.staff.phoneNumber || '+919999922222'}`}
+                            className="px-4 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 font-bold text-[11px] rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-initial animate-fadeIn"
+                          >
+                            📞 Call Staff
+                          </a>
+                        )}
+                        {user?.role !== 'Resident' && c.resident && (
+                          <a
+                            href={`tel:${c.resident.phoneNumber || '+919999911111'}`}
+                            className="px-4 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 font-bold text-[11px] rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-initial animate-fadeIn"
+                          >
+                            📞 Call Owner
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
