@@ -1362,48 +1362,94 @@ export const App: React.FC = () => {
           ====================================================================== */}
       {activeTab === 'visitors' && (
         <div className="flex flex-col lg:flex-row gap-6">
-          {/* Main Visitor registry logs list */}
+          {/* Main Content Area */}
           <div className="flex-1 glass-panel p-6 rounded-2xl border border-white/5">
-            <h3 className="text-lg font-bold text-white mb-4">Gate Visitor Registry Logs</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-300">
-                <thead>
-                  <tr className="border-b border-white/5 text-slate-400 text-xs font-bold uppercase tracking-wider">
-                    <th className="py-3 px-4">Visitor</th>
-                    <th className="py-3 px-4">Flat Bound</th>
-                    <th className="py-3 px-4">Gate In Timings</th>
-                    <th className="py-3 px-4">Gate Out Timings</th>
-                    <th className="py-3 px-4">Pass Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {visitorLogs.map((log: any) => (
-                    <tr key={log.id} className="hover:bg-white/5 transition-all text-xs">
-                      <td className="py-4 px-4 font-semibold text-white">
-                        {log.visitor.name}
-                        <span className="block text-[10px] text-slate-500 uppercase tracking-widest mt-0.5 text-[9px] font-bold">{log.visitor.visitorType} {log.visitor.company ? `(${log.visitor.company})` : ''}</span>
-                      </td>
-                      <td className="py-4 px-4 font-bold text-cyan-400">{log.flat?.number || 'A-101'}</td>
-                      <td className="py-4 px-4 text-slate-300 font-mono">{new Date(log.checkedInAt).toLocaleTimeString()}</td>
-                      <td className="py-4 px-4 font-mono">
-                        {log.checkedOutAt ? (
-                          <span className="text-slate-500">{new Date(log.checkedOutAt).toLocaleTimeString()}</span>
-                        ) : (
-                          <span className="text-yellow-500 font-bold uppercase text-[9px] tracking-wider animate-pulse">Inside</span>
-                        )}
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                          log.checkedOutAt ? 'bg-slate-800 text-slate-400' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        }`}>
-                          {log.checkedOutAt ? 'Checked out' : 'active inside'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {user.role === 'Resident' ? (
+              <div>
+                <h3 className="text-lg font-bold text-white mb-4">My Pre-Approved Visitor Passes</h3>
+                {visitors.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500 text-sm">
+                    No active pre-approved passes found. Generate one using the form on the right!
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {visitors.map((v: any) => (
+                      <div key={v.id} className="p-4 bg-slate-950 border border-white/5 rounded-xl text-center flex flex-col justify-between">
+                        <div>
+                          <span className="inline-block text-[9px] uppercase tracking-wider font-bold bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-md border border-emerald-500/20 mb-2">
+                            {v.visitorType} - {v.name}
+                          </span>
+                          {v.phoneNumber && (
+                            <p className="text-xs text-slate-400 mb-1">Phone: {v.phoneNumber}</p>
+                          )}
+                          {v.vehicleNumber && (
+                            <p className="text-xs text-slate-400 mb-1">Vehicle: {v.vehicleNumber}</p>
+                          )}
+                          
+                          {/* Simulation QR image */}
+                          <div className="w-28 h-28 mx-auto my-3 bg-white p-2 rounded-xl flex items-center justify-center shadow-lg border border-white/20">
+                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${v.qrCode}`} alt="Visitor pass QR" className="w-full h-full" />
+                          </div>
+                          
+                          <p className="text-[10px] text-slate-400">Pass Code: <strong className="text-emerald-400">{v.qrCode}</strong></p>
+                          <p className="text-[9px] text-slate-500 mt-1">Present to guard at main gate A</p>
+                        </div>
+                        
+                        <button
+                          onClick={() => handleDeletePass(v.id)}
+                          className="mt-4 w-full bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-400 hover:text-red-300 font-bold py-2 rounded-xl text-xs transition-all"
+                        >
+                          Revoke / Delete Pass
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <h3 className="text-lg font-bold text-white mb-4">Gate Visitor Registry Logs</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-300">
+                    <thead>
+                      <tr className="border-b border-white/5 text-slate-400 text-xs font-bold uppercase tracking-wider">
+                        <th className="py-3 px-4">Visitor</th>
+                        <th className="py-3 px-4">Flat Bound</th>
+                        <th className="py-3 px-4">Gate In Timings</th>
+                        <th className="py-3 px-4">Gate Out Timings</th>
+                        <th className="py-3 px-4">Pass Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {visitorLogs.map((log: any) => (
+                        <tr key={log.id} className="hover:bg-white/5 transition-all text-xs">
+                          <td className="py-4 px-4 font-semibold text-white">
+                            {log.visitor.name}
+                            <span className="block text-[10px] text-slate-500 uppercase tracking-widest mt-0.5 text-[9px] font-bold">{log.visitor.visitorType} {log.visitor.company ? `(${log.visitor.company})` : ''}</span>
+                          </td>
+                          <td className="py-4 px-4 font-bold text-cyan-400">{log.flat?.number || 'A-101'}</td>
+                          <td className="py-4 px-4 text-slate-300 font-mono">{new Date(log.checkedInAt).toLocaleTimeString()}</td>
+                          <td className="py-4 px-4 font-mono">
+                            {log.checkedOutAt ? (
+                              <span className="text-slate-500">{new Date(log.checkedOutAt).toLocaleTimeString()}</span>
+                            ) : (
+                              <span className="text-yellow-500 font-bold uppercase text-[9px] tracking-wider animate-pulse">Inside</span>
+                            )}
+                          </td>
+                          <td className="py-4 px-4">
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                              log.checkedOutAt ? 'bg-slate-800 text-slate-400' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            }`}>
+                              {log.checkedOutAt ? 'Checked out' : 'active inside'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Pre-approve Guest Card (Residents only) */}
