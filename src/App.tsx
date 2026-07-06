@@ -525,6 +525,19 @@ export const App: React.FC = () => {
     }
   };
 
+  // Resident deletes/revokes a pass
+  const handleDeletePass = async (passId: string) => {
+    try {
+      const res = await api.deleteVisitorPass(passId);
+      if (res.success) {
+        setVisitors((prev) => prev.filter((v: any) => v.id !== passId));
+        loadData();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   // Pay maintenance simulated transaction
   const handlePayInvoice = async () => {
     if (!selectedInvoice) return;
@@ -1468,6 +1481,13 @@ export const App: React.FC = () => {
                         
                         <p className="text-[10px] text-slate-400">Pass Code: <strong className="text-emerald-400">{v.qrCode}</strong></p>
                         <p className="text-[9px] text-slate-500 mt-1">Present to guard at main gate A</p>
+                        
+                        <button
+                          onClick={() => handleDeletePass(v.id)}
+                          className="mt-3 w-full bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-400 hover:text-red-300 font-bold py-1.5 rounded-lg text-[10px] transition-all"
+                        >
+                          Revoke / Delete Pass
+                        </button>
                       </div>
                     ))}
                   </div>

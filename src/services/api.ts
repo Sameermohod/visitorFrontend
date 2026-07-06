@@ -356,6 +356,16 @@ export const api = {
     }
   },
 
+  deleteVisitorPass: async (passId: string) => {
+    try {
+      const res = await axios.delete(`${API_BASE}/visitors/${passId}`, { headers: getHeaders() });
+      return res.data;
+    } catch (e) {
+      mockVisitors = mockVisitors.filter(v => v.id !== passId);
+      return { success: true, message: 'Visitor pass deleted successfully' };
+    }
+  },
+
   // Complaints Lifecycle
   getComplaints: async (status?: string) => {
     try {
