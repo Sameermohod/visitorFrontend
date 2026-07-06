@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API_BASE = 'https://visitorbackend-732d.onrender.com/api/v1';
-
+console.log("nem")
 const getHeaders = () => {
   const token = localStorage.getItem('accessToken');
   const tenantId = localStorage.getItem('tenantId') || '';
