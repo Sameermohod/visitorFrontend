@@ -93,8 +93,8 @@ let mockVisitorLogs = [
 ];
 
 let mockComplaints = [
-  { id: 'c1', ticketNumber: 'TIC-LOTA-12891', title: 'Water leakage in toilet', description: 'There is a continuous leakage in the master bedroom bathroom toilet pipe.', category: 'PLUMBING', priority: 'HIGH', status: 'OPEN', raisedBy: 'Amit Sharma', resident: { firstName: 'Amit', lastName: 'Sharma' }, staff: null, comments: [], createdAt: '2026-05-24T12:00:00Z' },
-  { id: 'c2', ticketNumber: 'TIC-LOTA-90214', title: 'Lift elevator stopped working', description: 'Wing B main elevator is stuck on the 4th floor.', category: 'INFRASTRUCTURE', priority: 'URGENT', status: 'IN_PROGRESS', raisedBy: 'Rahul Sen', resident: { firstName: 'Rahul', lastName: 'Sen' }, staff: { firstName: 'Karan', lastName: 'Prasad', type: 'Plumber' }, comments: [{ user: { firstName: 'Karan', lastName: 'Prasad' }, comment: 'On it, resolving by evening.', createdAt: '2026-05-25T09:00:00Z' }], createdAt: '2026-05-25T08:00:00Z' },
+  { id: 'c1', ticketNumber: 'TIC-LOTA-12891', title: 'Water leakage in toilet', description: 'There is a continuous leakage in the master bedroom bathroom toilet pipe.', category: 'PLUMBING', priority: 'HIGH', status: 'OPEN', raisedBy: 'u3', resident: { firstName: 'Amit', lastName: 'Sharma', phoneNumber: '+919876543210' }, staff: null, comments: [], createdAt: '2026-05-24T12:00:00Z' },
+  { id: 'c2', ticketNumber: 'TIC-LOTA-90214', title: 'Lift elevator stopped working', description: 'Wing B main elevator is stuck on the 4th floor.', category: 'INFRASTRUCTURE', priority: 'URGENT', status: 'IN_PROGRESS', raisedBy: 'u3', resident: { firstName: 'Amit', lastName: 'Sharma', phoneNumber: '+919876543210' }, staff: { firstName: 'Ram', lastName: 'Singh', type: 'Plumber', phoneNumber: '+919999922222' }, comments: [{ user: { firstName: 'Ram', lastName: 'Singh' }, comment: 'On it, resolving by evening.', createdAt: '2026-05-25T09:00:00Z' }], createdAt: '2026-05-25T08:00:00Z' },
 ];
 
 let mockInvoices = [
@@ -266,6 +266,19 @@ export const api = {
     }
   },
 
+  toggleStaffActive: async (staffId: string, isActive: boolean) => {
+    try {
+      const res = await axios.patch(`${API_BASE}/staff/${staffId}/status`, { isActive }, { headers: getHeaders() });
+      return res.data;
+    } catch (e) {
+      const staffMember = mockStaff.find(s => s.id === staffId);
+      if (staffMember) {
+        staffMember.isActive = isActive;
+      }
+      return { success: true, message: 'Staff status successfully updated' };
+    }
+  },
+
   // Visitors Pass Management
   getVisitorLogs: async () => {
     try {
@@ -410,7 +423,7 @@ export const api = {
         priority: complaintData.priority,
         status,
         raisedBy: 'Amit Sharma',
-        resident: { firstName: 'Amit', lastName: 'Sharma' },
+        resident: { firstName: 'Amit', lastName: 'Sharma', phoneNumber: '+919876543210' },
         staff: staffObj,
         comments: [],
         createdAt: new Date().toISOString(),
@@ -582,14 +595,38 @@ export const api = {
         };
       }
 
-      if (role === 'Security Guard' || role === 'Maintenance Staff') {
+      if (role === 'Security Guard') {
         return {
           success: true,
           data: {
-            view: role === 'Security Guard' ? 'GUARD' : 'STAFF',
+            view: 'GUARD',
+            stats: { visitorsTodayCount: mockVisitorLogs.length },
+          },
+        };
+      }
+
+      if (role === 'Supervisor') {
+        return {
+          success: true,
+          data: {
+            view: 'SUPERVISOR',
             stats: {
-              visitorsTodayCount: mockVisitorLogs.length,
+              residentsCount: mockResidents.length,
+              guardsCount: 1,
               openComplaints: mockComplaints.filter(c => c.status === 'OPEN').length,
+              visitorsTodayCount: mockVisitorLogs.length,
+            },
+          },
+        };
+      }
+
+      if (role === 'Plumber' || role === 'Electrician' || role === 'Cleaner' || role === 'Maintenance Staff') {
+        return {
+          success: true,
+          data: {
+            view: 'STAFF',
+            stats: {
+              myOpenComplaints: mockComplaints.filter(c => c.status === 'OPEN').length,
             },
           },
         };

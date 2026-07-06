@@ -6,7 +6,8 @@ import api from './services/api';
 import { 
   ShieldAlert, Landmark, QrCode, ClipboardList, 
   Users, CheckCircle2, AlertCircle, Plus, 
-  DollarSign, Sparkles, Bot, Send, Settings, X
+  DollarSign, Sparkles, Bot, Send, Settings, X,
+  Shield, Bell, UserCheck
 } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -100,7 +101,7 @@ export const App: React.FC = () => {
       const isCommittee = user.role === 'Committee Member';
       const isResident = user.role === 'Resident';
       const isGuard = user.role === 'Security Guard';
-      const isStaff = user.role === 'Maintenance Staff';
+      const isStaff = user.role === 'Maintenance Staff' || user.role === 'Plumber' || user.role === 'Electrician' || user.role === 'Cleaner' || user.role === 'Supervisor';
 
       // Residents directory
       if (isSaaSAdmin || isCommittee) {
@@ -134,8 +135,8 @@ export const App: React.FC = () => {
       const flatsRes = await api.getFlats();
       if (flatsRes.success) setFlats(flatsRes.data);
 
-      // Staff directory (Society Admins can manage, Residents can view to assign tickets)
-      if (isSaaSAdmin || isResident) {
+      // Staff directory (Society Admins, Supervisors and Residents can access)
+      if (isSaaSAdmin || isResident || user.role === 'Supervisor') {
         const staffRes = await api.getStaff();
         if (staffRes.success) setStaff(staffRes.data);
       }
@@ -282,6 +283,17 @@ export const App: React.FC = () => {
     } catch (error: any) {
       console.error(error);
       alert(error.message || 'Failed to onboard staff member.');
+    }
+  };
+
+  const handleToggleStaffActive = async (staffId: string, currentActive: boolean) => {
+    try {
+      const res = await api.toggleStaffActive(staffId, !currentActive);
+      if (res.success) {
+        loadData();
+      }
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -1163,6 +1175,95 @@ export const App: React.FC = () => {
             </div>
           )}
 
+          {/* SUPERVISOR CONSOLE PANEL */}
+          {user.role === 'Supervisor' && (
+            <div className="flex flex-col gap-6">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="glass-panel p-5 rounded-2xl border border-white/5 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Residents Onboarded</span>
+                    <p className="text-3xl font-extrabold text-white mt-1.5">{stats?.stats?.residentsCount || 0}</p>
+                  </div>
+                  <Users className="w-8 h-8 text-emerald-400 opacity-60" />
+                </div>
+                <div className="glass-panel p-5 rounded-2xl border border-white/5 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Unresolved Tickets</span>
+                    <p className="text-3xl font-extrabold text-red-400 mt-1.5">{stats?.stats?.openComplaints || 0}</p>
+                  </div>
+                  <ClipboardList className="w-8 h-8 text-red-400 opacity-60" />
+                </div>
+                <div className="glass-panel p-5 rounded-2xl border border-white/5 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Active Guards</span>
+                    <p className="text-3xl font-extrabold text-cyan-400 mt-1.5">{stats?.stats?.guardsCount || 0}</p>
+                  </div>
+                  <UserCheck className="w-8 h-8 text-cyan-400 opacity-60" />
+                </div>
+                <div className="glass-panel p-5 rounded-2xl border border-white/5 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Visitor Entries Today</span>
+                    <p className="text-3xl font-extrabold text-white mt-1.5">{stats?.stats?.visitorsTodayCount || 0}</p>
+                  </div>
+                  <Shield className="w-8 h-8 text-slate-400 opacity-60" />
+                </div>
+              </div>
+
+              {/* Quick links to actions */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
+                <button onClick={() => setActiveTab('complaints')} className="p-6 bg-slate-900/40 hover:bg-slate-900/60 border border-white/5 hover:border-cyan-500/30 rounded-2xl text-left flex flex-col justify-between h-40 transition-all duration-300 shadow-sm">
+                  <ClipboardList className="w-8 h-8 text-cyan-400" />
+                  <div>
+                    <h4 className="font-bold text-white text-base">Complaints Hub</h4>
+                    <p className="text-xs text-slate-400 mt-1">Review, assign, and escalate resident complaints.</p>
+                  </div>
+                </button>
+                <button onClick={() => setActiveTab('staff')} className="p-6 bg-slate-900/40 hover:bg-slate-900/60 border border-white/5 hover:border-emerald-500/30 rounded-2xl text-left flex flex-col justify-between h-40 transition-all duration-300 shadow-sm">
+                  <UserCheck className="w-8 h-8 text-emerald-400" />
+                  <div>
+                    <h4 className="font-bold text-white text-base">Staff & Guard Attendance</h4>
+                    <p className="text-xs text-slate-400 mt-1">Track staff logs, shifts, and salary accounts.</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STAFF PORTAL CONSOLE (Plumber, Electrician, Cleaner) */}
+          {(user.role === 'Plumber' || user.role === 'Electrician' || user.role === 'Cleaner' || user.role === 'Maintenance Staff') && (
+            <div className="flex flex-col gap-6">
+              {/* Profile card */}
+              <div className="glass-panel p-6 rounded-2xl border border-white/5 flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-white">Welcome, {user.firstName}!</h3>
+                  <p className="text-xs text-slate-400 mt-1">You are logged in as {user.role}. View and resolve your assigned service tickets.</p>
+                </div>
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                  {user.role}
+                </span>
+              </div>
+
+              {/* Stats & Quick Links */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <button onClick={() => setActiveTab('complaints')} className="p-6 bg-slate-900/40 hover:bg-slate-900/60 border border-white/5 hover:border-cyan-500/30 rounded-2xl text-left flex flex-col justify-between h-40 transition-all duration-300 shadow-sm">
+                  <ClipboardList className="w-8 h-8 text-cyan-400" />
+                  <div>
+                    <h4 className="font-bold text-white text-base">Complaints Worklist</h4>
+                    <p className="text-xs text-slate-400 mt-1">Check work assignments and update resolution status.</p>
+                  </div>
+                </button>
+
+                <button onClick={() => setActiveTab('notices')} className="p-6 bg-slate-900/40 hover:bg-slate-900/60 border border-white/5 hover:border-emerald-500/30 rounded-2xl text-left flex flex-col justify-between h-40 transition-all duration-300 shadow-sm">
+                  <Bell className="w-8 h-8 text-emerald-400" />
+                  <div>
+                    <h4 className="font-bold text-white text-base">Notice Board</h4>
+                    <p className="text-xs text-slate-400 mt-1">Stay updated with society notices and bulletins.</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
+
         </div>
       )}
 
@@ -1562,6 +1663,7 @@ export const App: React.FC = () => {
                     <th className="py-3 px-4">Shift Hours</th>
                     <th className="py-3 px-4">Monthly Salary</th>
                     <th className="py-3 px-4">System Credentials</th>
+                    <th className="py-3 px-4">Status & Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -1569,7 +1671,9 @@ export const App: React.FC = () => {
                     <tr key={s.id} className="hover:bg-white/5 transition-all text-xs">
                       <td className="py-4 px-4 font-semibold text-white">
                         {s.firstName} {s.lastName}
-                        <span className="block text-[10px] text-slate-500">{s.phoneNumber}</span>
+                        <span className="block text-[10px] text-slate-500">
+                          📞 <a href={`tel:${s.phoneNumber}`} className="text-cyan-400 hover:text-cyan-300 hover:underline">{s.phoneNumber}</a>
+                        </span>
                       </td>
                       <td className="py-4 px-4">
                         <span className="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -1587,6 +1691,27 @@ export const App: React.FC = () => {
                         ) : (
                           <span className="text-slate-500 italic">No System Login</span>
                         )}
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                            s.isActive !== false ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                          }`}>
+                            {s.isActive !== false ? 'Active' : 'Inactive'}
+                          </span>
+                          {user.role === 'Society Admin' && (
+                            <button
+                              onClick={() => handleToggleStaffActive(s.id, s.isActive !== false)}
+                              className={`px-2 py-0.5 rounded font-bold text-[9px] uppercase transition-all ${
+                                s.isActive !== false 
+                                  ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20' 
+                                  : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20'
+                              }`}
+                            >
+                              {s.isActive !== false ? 'Deactivate' : 'Activate'}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1727,14 +1852,21 @@ export const App: React.FC = () => {
                       <span className="text-[9px] font-mono text-slate-500 font-bold block">{c.ticketNumber}</span>
                       <h4 className="font-bold text-white text-base mt-0.5">{c.title}</h4>
                       <p className="text-xs text-slate-400 mt-1 font-medium">{c.description}</p>
-                      
+
+                      {/* Contact Resident info */}
+                      {c.resident && (
+                        <span className="text-[10px] font-bold text-slate-400 mt-1.5 block">
+                          👤 Filed By: <span className="text-white">{c.resident.firstName} {c.resident.lastName}</span>
+                        </span>
+                      )}
+
                       {/* Assigned technician status */}
                       {c.staff ? (
-                        <span className="text-[10px] font-bold text-slate-400 mt-2 block">
+                        <span className="text-[10px] font-bold text-slate-400 mt-1.5 block">
                           🛠️ Technician: <span className="text-emerald-400">{c.staff.firstName} {c.staff.lastName} ({c.staff.type})</span>
                         </span>
                       ) : (
-                        <span className="text-[10px] font-bold text-rose-400/80 mt-2 block">
+                        <span className="text-[10px] font-bold text-rose-400/80 mt-1.5 block">
                           ⚠️ Unassigned Ticket
                         </span>
                       )}
@@ -1829,6 +1961,22 @@ export const App: React.FC = () => {
                       >
                         Post Note
                       </button>
+                      {user?.role === 'Resident' && c.staff && (
+                        <a
+                          href={`tel:${c.staff.phoneNumber || '+919999922222'}`}
+                          className="px-4 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 font-bold text-[11px] rounded-xl shadow-sm transition-all flex items-center gap-1 shrink-0 animate-fadeIn"
+                        >
+                          📞 Call Staff
+                        </a>
+                      )}
+                      {user?.role !== 'Resident' && c.resident && (
+                        <a
+                          href={`tel:${c.resident.phoneNumber || '+919999911111'}`}
+                          className="px-4 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 font-bold text-[11px] rounded-xl shadow-sm transition-all flex items-center gap-1 shrink-0 animate-fadeIn"
+                        >
+                          📞 Call Owner
+                        </a>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1913,6 +2061,17 @@ export const App: React.FC = () => {
                         </option>
                       ))}
                   </select>
+                  {newComplaint.staffId && (() => {
+                    const selectedStaff = staff.find((s: any) => s.id === newComplaint.staffId);
+                    return selectedStaff && (
+                      <div className="mt-2.5 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center animate-fadeIn">
+                        <span className="block text-[9px] uppercase font-bold text-slate-400 tracking-wider">🚨 Emergency Call Staff</span>
+                        <a href={`tel:${selectedStaff.phoneNumber}`} className="text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-colors block mt-1">
+                          📞 Call {selectedStaff.firstName}: {selectedStaff.phoneNumber}
+                        </a>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <button type="submit" className="w-full mt-2 bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-2.5 rounded-xl text-xs shadow-md">

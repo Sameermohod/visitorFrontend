@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState, setTenantSlug, clearCredentials } from '../store';
+import { RootState, clearCredentials } from '../store';
 import { 
   Building2, Users, ClipboardList, CreditCard, Shield, 
   LayoutDashboard, LogOut, Bell, Menu, X, UserCheck, Settings
@@ -21,21 +21,17 @@ export const DashboardLayout: React.FC<LayoutProps> = ({ children, activeTab, se
 
   // Dynamic Sidebar Navigation Configs based on RBAC
   const navigationItems = [
-    { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['Super Admin', 'Society Admin', 'Resident', 'Security Guard'] },
-    { id: 'residents', name: 'Residents Directory', icon: Users, allowedRoles: ['Super Admin', 'Society Admin', 'Committee Member'] },
-    { id: 'staff', name: 'Staff & Guards', icon: UserCheck, allowedRoles: ['Super Admin', 'Society Admin', 'Committee Member'] },
-    { id: 'visitors', name: 'Visitor Registry', icon: Shield, allowedRoles: ['Super Admin', 'Society Admin', 'Security Guard', 'Resident'] },
-    { id: 'complaints', name: 'Complaints Hub', icon: ClipboardList, allowedRoles: ['Super Admin', 'Society Admin', 'Resident', 'Committee Member', 'Maintenance Staff'] },
+    { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['Super Admin', 'Society Admin', 'Resident', 'Security Guard', 'Supervisor', 'Plumber', 'Electrician', 'Cleaner', 'Maintenance Staff'] },
+    { id: 'residents', name: 'Residents Directory', icon: Users, allowedRoles: ['Super Admin', 'Society Admin', 'Committee Member', 'Supervisor'] },
+    { id: 'staff', name: 'Staff & Guards', icon: UserCheck, allowedRoles: ['Super Admin', 'Society Admin', 'Committee Member', 'Supervisor'] },
+    { id: 'visitors', name: 'Visitor Registry', icon: Shield, allowedRoles: ['Super Admin', 'Society Admin', 'Security Guard', 'Resident', 'Supervisor'] },
+    { id: 'complaints', name: 'Complaints Hub', icon: ClipboardList, allowedRoles: ['Super Admin', 'Society Admin', 'Resident', 'Committee Member', 'Maintenance Staff', 'Supervisor', 'Plumber', 'Electrician', 'Cleaner'] },
     { id: 'billing', name: 'Invoicing & Bills', icon: CreditCard, allowedRoles: ['Super Admin', 'Society Admin', 'Resident', 'Accountant'] },
-    { id: 'notices', name: 'Notice Board', icon: Bell, allowedRoles: ['Super Admin', 'Society Admin', 'Resident', 'Committee Member'] },
+    { id: 'notices', name: 'Notice Board', icon: Bell, allowedRoles: ['Super Admin', 'Society Admin', 'Resident', 'Committee Member', 'Supervisor', 'Plumber', 'Electrician', 'Cleaner', 'Maintenance Staff'] },
     { id: 'settings', name: 'Society Settings', icon: Settings, allowedRoles: ['Super Admin', 'Society Admin'] },
   ];
 
   const filteredNavItems = navigationItems.filter(item => item.allowedRoles.includes(role));
-
-  const handleTenantChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    dispatch(setTenantSlug(e.target.value));
-  };
 
   const handleLogout = () => {
     dispatch(clearCredentials());
@@ -63,7 +59,7 @@ export const DashboardLayout: React.FC<LayoutProps> = ({ children, activeTab, se
       <header className="md:hidden w-full px-4 py-3 bg-slate-900/90 border-b border-white/5 flex justify-between items-center z-50">
         <div className="flex items-center gap-2">
           <Building2 className="w-6 h-6 text-emerald-400" />
-          <span className="font-bold text-lg tracking-tight">SaaS Society</span>
+          <span className="font-bold text-lg tracking-tight">{branding.name}</span>
         </div>
         <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
           {isMobileMenuOpen ? <X className="w-6 h-6 text-slate-300" /> : <Menu className="w-6 h-6 text-slate-300" />}
@@ -83,18 +79,10 @@ export const DashboardLayout: React.FC<LayoutProps> = ({ children, activeTab, se
               <Building2 className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="font-extrabold text-lg tracking-wide bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">SaaS Society</h1>
+              <h1 className="font-extrabold text-lg tracking-wide bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">{branding.name}</h1>
               <span className="text-[10px] text-emerald-400/80 font-bold uppercase tracking-widest">Multi-Tenant v1.0</span>
             </div>
           </div>
-
-          {/* Active Tenant Custom branding Badge */}
-          {role !== 'Super Admin' && (
-            <div className={`p-3 rounded-lg border flex flex-col gap-1 ${branding.color} transition-all duration-300`}>
-              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Current Workspace</span>
-              <span className="font-bold text-sm truncate">{branding.name}</span>
-            </div>
-          )}
 
           {/* Navigation Links */}
           <nav className="flex flex-col gap-1.5 mt-2">
@@ -149,7 +137,7 @@ export const DashboardLayout: React.FC<LayoutProps> = ({ children, activeTab, se
 
       {/* 3. Main Dashboard Window */}
       <main className="flex-1 flex flex-col min-w-0 p-4 md:p-8 overflow-y-auto">
-        {/* Dynamic Top Header with Tenant Selector Sandbox */}
+        {/* Dynamic Top Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 border-b border-white/5 mb-6">
           <div>
             <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight capitalize">
@@ -157,25 +145,6 @@ export const DashboardLayout: React.FC<LayoutProps> = ({ children, activeTab, se
             </h2>
             <p className="text-xs md:text-sm text-slate-400 mt-1">Multi-tenant dashboard system secured with dynamic RBAC parameters.</p>
           </div>
-
-          {/* Dynamic Sandbox Tenant switcher */}
-          {role !== 'Super Admin' && (
-            <div className="flex items-center gap-3 bg-slate-900/60 p-2.5 rounded-xl border border-white/5">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Tenant Sandbox:</span>
-              <select
-                value={tenantSlug || 'lotus-heights'}
-                onChange={handleTenantChange}
-                className="bg-dark-bg text-slate-200 text-xs font-bold py-1.5 px-3 rounded-lg border border-white/10 focus:outline-none focus:border-emerald-500/50"
-              >
-                <option value="lotus-heights">Lotus Heights</option>
-                <option value="green-valley">Green Valley Society</option>
-                <option value="skyline-towers">Skyline Towers</option>
-                {user?.tenant?.slug && user.tenant.slug !== 'lotus-heights' && user.tenant.slug !== 'green-valley' && user.tenant.slug !== 'skyline-towers' && (
-                  <option value={user.tenant.slug}>{user.tenant.name}</option>
-                )}
-              </select>
-            </div>
-          )}
         </div>
 
         {/* View Frame */}
