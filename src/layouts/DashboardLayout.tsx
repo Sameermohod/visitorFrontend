@@ -66,7 +66,15 @@ export const DashboardLayout: React.FC<LayoutProps> = ({ children, activeTab, se
         </button>
       </header>
 
-      {/* 2. Navigation Sidebar */}
+      {/* 2. Mobile Menu Backdrop Overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-30 md:hidden"
+          onClick={() => setIsMobileMenuOpen(false)} 
+        />
+      )}
+
+      {/* 3. Navigation Sidebar */}
       <aside className={`
         fixed inset-y-0 left-0 z-40 w-64 glass-panel border-r border-white/5 p-4 flex flex-col justify-between transform transition-transform duration-300 ease-in-out
         md:relative md:translate-x-0

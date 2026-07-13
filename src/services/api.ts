@@ -1,7 +1,8 @@
 import axios from 'axios';
 
-const API_BASE = 'https://visitorbackend-732d.onrender.com/api/v1';
-console.log("nem")
+const API_BASE = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:5000/api/v1'
+  : 'https://visitorbackend-732d.onrender.com/api/v1';
 const getHeaders = () => {
   const token = localStorage.getItem('accessToken');
   const tenantId = localStorage.getItem('tenantId') || '';
@@ -742,6 +743,76 @@ export const api = {
           response: `[Mock AI Assistant Mode]: I received your message "${chatPayload.message}". Real-time completions will be functional once the backend server and LLM API credentials are configured.`
         }
       };
+    }
+  },
+
+  // Super Admin: Toggle tenant active/inactive status
+  toggleTenantStatus: async (id: string, isActive: boolean) => {
+    try {
+      const res = await axios.patch(`${API_BASE}/super-admin/tenants/${id}/status`, { isActive }, { headers: getHeaders() });
+      return res.data;
+    } catch (e: any) {
+      if (e.response && e.response.data) {
+        return e.response.data;
+      }
+      throw e;
+    }
+  },
+
+  // Super Admin: Delete tenant/society
+  deleteTenant: async (id: string) => {
+    try {
+      const res = await axios.delete(`${API_BASE}/super-admin/tenants/${id}`, { headers: getHeaders() });
+      return res.data;
+    } catch (e: any) {
+      if (e.response && e.response.data) {
+        return e.response.data;
+      }
+      throw e;
+    }
+  },
+
+  // Super Admin: Fetch global dashboard data
+  getSuperAdminData: async (filters?: { tenantId?: string; startDate?: string; endDate?: string }) => {
+    try {
+      const params = new URLSearchParams();
+      if (filters?.tenantId) params.append('tenantId', filters.tenantId);
+      if (filters?.startDate) params.append('startDate', filters.startDate);
+      if (filters?.endDate) params.append('endDate', filters.endDate);
+      const queryString = params.toString() ? `?${params.toString()}` : '';
+      const res = await axios.get(`${API_BASE}/super-admin/data${queryString}`, { headers: getHeaders() });
+      return res.data;
+    } catch (e: any) {
+      if (e.response && e.response.data) {
+        return e.response.data;
+      }
+      throw e;
+    }
+  },
+
+  // Super Admin: Delete user
+  deleteUser: async (id: string) => {
+    try {
+      const res = await axios.delete(`${API_BASE}/super-admin/users/${id}`, { headers: getHeaders() });
+      return res.data;
+    } catch (e: any) {
+      if (e.response && e.response.data) {
+        return e.response.data;
+      }
+      throw e;
+    }
+  },
+
+  // Super Admin: Delete staff
+  deleteStaff: async (id: string) => {
+    try {
+      const res = await axios.delete(`${API_BASE}/super-admin/staff/${id}`, { headers: getHeaders() });
+      return res.data;
+    } catch (e: any) {
+      if (e.response && e.response.data) {
+        return e.response.data;
+      }
+      throw e;
     }
   },
 };

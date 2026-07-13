@@ -6,7 +6,7 @@ import api from './services/api';
 import { 
   ShieldAlert, Landmark, QrCode, ClipboardList, 
   Users, CheckCircle2, AlertCircle, Plus, 
-  DollarSign, Sparkles, Bot, Send, Settings, X,
+  Building2, Sparkles, Bot, Send, Settings, X,
   Shield, Bell, UserCheck
 } from 'lucide-react';
 
@@ -18,7 +18,6 @@ export const App: React.FC = () => {
   // Login form states
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [tenantSlug, setTenantSlugForm] = useState('lotus-heights');
   const [complaintError, setComplaintError] = useState<string | null>(null);
   const [activeComment, setActiveComment] = useState<{ [complaintId: string]: string }>({});
 
@@ -101,13 +100,45 @@ export const App: React.FC = () => {
   const [isManualFlatDropdownOpen, setIsManualFlatDropdownOpen] = useState(false);
   const [selectedManualFlat, setSelectedManualFlat] = useState<any>(null);
 
+  // Security Guard Console Tabs
+  const [guardConsoleTab, setGuardConsoleTab] = useState<'verify' | 'walkin' | 'logs'>('verify');
+
   // Resident Pre-Approve Duration selection
   const [passDuration, setPassDuration] = useState('once');
+
+  // Separate login page for Super Admin
+  const [isSuperAdminLogin, setIsSuperAdminLogin] = useState(false);
+
+  // Toast Notification System
+  const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'error' | 'info' }[]>([]);
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
+  };
 
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [chatHistory, setChatHistory] = useState<any[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
+
+  // Super Admin state & filters
+  const [superAdminData, setSuperAdminData] = useState<{
+    tenants: any[];
+    users: any[];
+    staff: any[];
+    visitorLogs: any[];
+  }>({ tenants: [], users: [], staff: [], visitorLogs: [] });
+
+  const [superAdminFilters, setSuperAdminFilters] = useState<{
+    tenantId: string;
+    startDate: string;
+    endDate: string;
+  }>({ tenantId: '', startDate: '', endDate: '' });
+
+  const [superAdminActiveTab, setSuperAdminActiveTab] = useState<'societies' | 'users' | 'staff' | 'visitorLogs'>('societies');
 
   // Fetch view-specific metrics
   const loadData = async () => {
@@ -118,7 +149,21 @@ export const App: React.FC = () => {
       if (statsRes.success) setStats(statsRes.data);
 
       if (user.role === 'Super Admin') {
-        setLoading(false);
+        try {
+          const res = await api.getSuperAdminData({
+            tenantId: superAdminFilters.tenantId || undefined,
+            startDate: superAdminFilters.startDate || undefined,
+            endDate: superAdminFilters.endDate || undefined
+          });
+          if (res.success) {
+            setSuperAdminData(res.data);
+          }
+        } catch (e: any) {
+          console.error(e);
+          showToast(e.message || 'Failed to load global data.', 'error');
+        } finally {
+          setLoading(false);
+        }
         return;
       }
 
@@ -205,7 +250,7 @@ export const App: React.FC = () => {
     if (user && user.role !== 'Super Admin') {
       loadSettings();
     }
-  }, [user, localStorage.getItem('tenantSlug')]);
+  }, [user, localStorage.getItem('tenantSlug'), superAdminFilters]);
 
   // Demo Account Quick log in shortcut
   const handleQuickLogin = async (role: string) => {
@@ -242,7 +287,7 @@ export const App: React.FC = () => {
     e.preventDefault();
     setLoginError(null);
     try {
-      const res = await api.login({ email, password, tenantSlug });
+      const res = await api.login({ email, password });
       if (res.success) {
         dispatch(setCredentials(res.data));
         setActiveTab('dashboard');
@@ -270,7 +315,6 @@ export const App: React.FC = () => {
       if (res.success) {
         setRegSuccess(`Society "${regTenantName}" registered successfully! You can now log in using your admin credentials.`);
         setIsRegistering(false);
-        setTenantSlugForm(regTenantSlug);
         setEmail(regEmail);
         setPassword(regPassword);
       }
@@ -283,17 +327,19 @@ export const App: React.FC = () => {
   const handleOnboardResident = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newResident.flatId) {
-      alert('Please select a valid flat from the dropdown list.');
+      showToast('Please select a valid flat from the dropdown list.', 'error');
       return;
     }
     try {
       const res = await api.onboardResident(newResident);
       if (res.success) {
         setNewResident({ firstName: '', lastName: '', email: '', phoneNumber: '', flatId: '', ownershipStatus: 'OWNER' });
+        showToast('Resident onboarded successfully! A temporary login password has been sent to their email.', 'success');
         loadData();
       }
-    } catch (e) {
-      console.error(e);
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || 'Failed to onboard resident.', 'error');
     }
   };
 
@@ -302,13 +348,13 @@ export const App: React.FC = () => {
     try {
       const res = await api.onboardStaff(newStaff);
       if (res.success) {
-        alert(res.message || 'Staff member onboarded successfully!');
+        showToast('Staff member onboarded successfully! A temporary login password has been sent to their email.', 'success');
         setNewStaff({ firstName: '', lastName: '', phoneNumber: '', type: 'Guard', salaryMonthly: 15000, shiftStart: '08:00', shiftEnd: '20:00', email: '' });
         loadData();
       }
     } catch (error: any) {
       console.error(error);
-      alert(error.message || 'Failed to onboard staff member.');
+      showToast(error.message || 'Failed to onboard staff member.', 'error');
     }
   };
 
@@ -316,10 +362,12 @@ export const App: React.FC = () => {
     try {
       const res = await api.toggleStaffActive(staffId, !currentActive);
       if (res.success) {
+        showToast('Staff status updated successfully.', 'success');
         loadData();
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      showToast(e.message || 'Failed to update staff status.', 'error');
     }
   };
 
@@ -336,7 +384,7 @@ export const App: React.FC = () => {
       }
 
       if (!bId) {
-        alert('Society layout building tower not found. Please sync seeds.');
+        showToast('Society layout building tower not found. Please sync seeds.', 'error');
         return;
       }
 
@@ -349,13 +397,13 @@ export const App: React.FC = () => {
       });
 
       if (res.success) {
-        alert(`Successfully generated Wing ${flatGen.wingName} containing ${res.data.flatsCount || res.data.flats?.length || 0} flats directly in PostgreSQL!`);
+        showToast(`Successfully generated Wing ${flatGen.wingName} containing ${res.data.flatsCount || res.data.flats?.length || 0} flats directly in PostgreSQL!`, 'success');
         setFlatGen({ wingName: '', floorsCount: 5, flatsPerFloor: 4, flatType: '2BHK' });
         loadData(); // Refresh list immediately!
       }
     } catch (error: any) {
       console.error(error);
-      alert(error.message || 'Failed to generate flats.');
+      showToast(error.message || 'Failed to generate flats.', 'error');
     }
   };
 
@@ -519,6 +567,80 @@ export const App: React.FC = () => {
     setChatLoading(false);
   };
 
+  // Super Admin actions
+  const handleToggleTenantStatus = async (tenantId: string, currentActiveStatus: boolean) => {
+    try {
+      setLoading(true);
+      const res = await api.toggleTenantStatus(tenantId, !currentActiveStatus);
+      if (res.success) {
+        showToast('Society status updated successfully.', 'success');
+        await loadData();
+      } else {
+        showToast(res.message || 'Failed to update tenant status', 'error');
+      }
+    } catch (e: any) {
+      showToast(e.message || 'Failed to update tenant status', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteTenant = async (tenantId: string) => {
+    if (!window.confirm('Are you sure you want to delete this society? This will suspend all access and soft-delete the records.')) {
+      return;
+    }
+    try {
+      setLoading(true);
+      const res = await api.deleteTenant(tenantId);
+      if (res.success) {
+        showToast('Society deleted successfully.', 'success');
+        await loadData();
+      } else {
+        showToast(res.message || 'Failed to delete tenant', 'error');
+      }
+    } catch (e: any) {
+      showToast(e.message || 'Failed to delete tenant', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!window.confirm('Are you sure you want to delete this user?')) return;
+    try {
+      setLoading(true);
+      const res = await api.deleteUser(userId);
+      if (res.success) {
+        showToast('User deleted successfully.', 'success');
+        await loadData();
+      } else {
+        showToast(res.message || 'Failed to delete user.', 'error');
+      }
+    } catch (e: any) {
+      showToast(e.message || 'Failed to delete user.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteStaff = async (staffId: string) => {
+    if (!window.confirm('Are you sure you want to delete this staff member?')) return;
+    try {
+      setLoading(true);
+      const res = await api.deleteStaff(staffId);
+      if (res.success) {
+        showToast('Staff member deleted successfully.', 'success');
+        await loadData();
+      } else {
+        showToast(res.message || 'Failed to delete staff member.', 'error');
+      }
+    } catch (e: any) {
+      showToast(e.message || 'Failed to delete staff member.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Scan & Verify pass
   const handleScanPass = async () => {
     setScannerError(null);
@@ -642,7 +764,36 @@ export const App: React.FC = () => {
   // Unauthenticated Login / Registration Screen
   if (!user) {
     return (
-      <div className="min-h-screen flex flex-col justify-center items-center p-4 bg-dark-bg relative overflow-hidden font-sans">
+      <>
+        {/* Toast Notifications Container */}
+        <div className="fixed top-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none max-w-sm w-full">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`pointer-events-auto flex items-center justify-between gap-3 px-5 py-4 rounded-2xl border shadow-lg backdrop-blur-md transition-all duration-300 ${
+                t.type === 'success'
+                  ? 'bg-emerald-950/90 border-emerald-500/30 text-emerald-200 shadow-emerald-950/20'
+                  : t.type === 'error'
+                  ? 'bg-rose-950/90 border-rose-500/30 text-rose-200 shadow-rose-950/20'
+                  : 'bg-slate-900/90 border-slate-700/30 text-slate-200'
+              }`}
+            >
+              <div className="flex items-center gap-3 text-sm font-semibold">
+                {t.type === 'success' && <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />}
+                {t.type === 'error' && <AlertCircle className="w-5 h-5 shrink-0 text-rose-400" />}
+                <span>{t.message}</span>
+              </div>
+              <button
+                onClick={() => setToasts((prev) => prev.filter((toast) => toast.id !== t.id))}
+                className="text-white/40 hover:text-white/70 text-sm font-bold transition-colors ml-2"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="min-h-screen flex flex-col justify-center items-center p-4 bg-dark-bg relative overflow-hidden font-sans">
         {/* Neon Glow Circles in background */}
         <div className="absolute top-1/4 left-1/4 w-80 h-80 bg-emerald-500/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-cyan-500/10 rounded-full blur-[100px] pointer-events-none" />
@@ -674,23 +825,12 @@ export const App: React.FC = () => {
           {!isRegistering ? (
             <form onSubmit={handleLoginSubmit} className="flex flex-col gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Society Slug</label>
-                <input
-                  type="text"
-                  value={tenantSlug}
-                  onChange={(e) => setTenantSlugForm(e.target.value)}
-                  placeholder="e.g. lotus-heights"
-                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500/50 text-white placeholder-slate-600"
-                />
-              </div>
-
-              <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Email Address</label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@domain.com"
+                  placeholder={isSuperAdminLogin ? "superadmin@saassociety.com" : "you@domain.com"}
                   required
                   className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500/50 text-white placeholder-slate-600"
                 />
@@ -712,19 +852,36 @@ export const App: React.FC = () => {
                 type="submit"
                 className="w-full mt-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold py-3.5 px-4 rounded-xl shadow-neon-green transition-all duration-300"
               >
-                Secure Login
+                {isSuperAdminLogin ? 'Launch Super Admin Portal' : 'Secure Login'}
               </button>
 
-              <p className="text-center text-xs text-slate-400 mt-2">
-                Need a new workspace?{' '}
+              <div className="flex flex-col gap-2 mt-2 text-center text-xs">
+                {!isSuperAdminLogin && (
+                  <p className="text-slate-400">
+                    Need a new society workspace?{' '}
+                    <button
+                      type="button"
+                      onClick={() => { setIsRegistering(true); setLoginError(null); }}
+                      className="text-emerald-400 font-bold hover:underline"
+                    >
+                      Create New Society
+                    </button>
+                  </p>
+                )}
+
                 <button
                   type="button"
-                  onClick={() => { setIsRegistering(true); setLoginError(null); }}
-                  className="text-emerald-400 font-bold hover:underline"
+                  onClick={() => {
+                    setIsSuperAdminLogin(!isSuperAdminLogin);
+                    setLoginError(null);
+                    setEmail('');
+                    setPassword('');
+                  }}
+                  className="text-cyan-400 font-bold hover:underline mt-1.5 block mx-auto"
                 >
-                  Create New Society
+                  {isSuperAdminLogin ? '← Back to Society Login' : '🔑 SaaS Super Admin Login'}
                 </button>
-              </p>
+              </div>
             </form>
           ) : (
             <form onSubmit={handleRegisterSubmit} className="flex flex-col gap-3.5 max-h-[50vh] overflow-y-auto pr-1">
@@ -847,47 +1004,72 @@ export const App: React.FC = () => {
           )}
 
           {/* Quick login sandboxes drawer */}
-          <div className="mt-8 pt-6 border-t border-white/5">
-            <h3 className="text-center text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Quick Demo Sandboxes</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => handleQuickLogin('Super Admin')}
-                className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-white/5 border border-white/5 text-slate-300 hover:border-emerald-500/30 hover:bg-emerald-500/5 text-xs font-bold transition-all duration-200"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
-                <span>Super Admin</span>
-              </button>
-              <button
-                onClick={() => handleQuickLogin('Society Admin')}
-                className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-white/5 border border-white/5 text-slate-300 hover:border-emerald-500/30 hover:bg-emerald-500/5 text-xs font-bold transition-all duration-200"
-              >
-                <Landmark className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Society Admin</span>
-              </button>
-              <button
-                onClick={() => handleQuickLogin('Resident')}
-                className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-white/5 border border-white/5 text-slate-300 hover:border-emerald-500/30 hover:bg-emerald-500/5 text-xs font-bold transition-all duration-200"
-              >
-                <Users className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Resident</span>
-              </button>
-              <button
-                onClick={() => handleQuickLogin('Security Guard')}
-                className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-white/5 border border-white/5 text-slate-300 hover:border-emerald-500/30 hover:bg-emerald-500/5 text-xs font-bold transition-all duration-200"
-              >
-                <ShieldAlert className="w-3.5 h-3.5 text-pink-400" />
-                <span>Gate Guard</span>
-              </button>
+          {!isSuperAdminLogin && (
+            <div className="mt-8 pt-6 border-t border-white/5">
+              <h3 className="text-center text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Quick Demo Sandboxes</h3>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => handleQuickLogin('Society Admin')}
+                  className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-white/5 border border-white/5 text-slate-300 hover:border-emerald-500/30 hover:bg-emerald-500/5 text-xs font-bold transition-all duration-200"
+                >
+                  <Landmark className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Admin</span>
+                </button>
+                <button
+                  onClick={() => handleQuickLogin('Resident')}
+                  className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-white/5 border border-white/5 text-slate-300 hover:border-emerald-500/30 hover:bg-emerald-500/5 text-xs font-bold transition-all duration-200"
+                >
+                  <Users className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Resident</span>
+                </button>
+                <button
+                  onClick={() => handleQuickLogin('Security Guard')}
+                  className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-white/5 border border-white/5 text-slate-300 hover:border-emerald-500/30 hover:bg-emerald-500/5 text-xs font-bold transition-all duration-200"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5 text-pink-400" />
+                  <span>Guard</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
+      </>
     );
   }
 
   // Dashboard Master layouts with Tab routing panels
   return (
-    <DashboardLayout activeTab={activeTab} setActiveTab={setActiveTab}>
+    <>
+      {/* Toast Notifications Container */}
+      <div className="fixed top-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none max-w-sm w-full">
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            className={`pointer-events-auto flex items-center justify-between gap-3 px-5 py-4 rounded-2xl border shadow-lg backdrop-blur-md transition-all duration-300 ${
+              t.type === 'success'
+                ? 'bg-emerald-950/90 border-emerald-500/30 text-emerald-200 shadow-emerald-950/20'
+                : t.type === 'error'
+                ? 'bg-rose-950/90 border-rose-500/30 text-rose-200 shadow-rose-950/20'
+                : 'bg-slate-900/90 border-slate-700/30 text-slate-200'
+            }`}
+          >
+            <div className="flex items-center gap-3 text-sm font-semibold">
+              {t.type === 'success' && <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />}
+              {t.type === 'error' && <AlertCircle className="w-5 h-5 shrink-0 text-rose-400" />}
+              <span>{t.message}</span>
+            </div>
+            <button
+              onClick={() => setToasts((prev) => prev.filter((toast) => toast.id !== t.id))}
+              className="text-white/40 hover:text-white/70 text-sm font-bold transition-colors ml-2"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <DashboardLayout activeTab={activeTab} setActiveTab={setActiveTab}>
       <div className={loading ? "opacity-60 pointer-events-none transition-opacity duration-300" : "transition-opacity duration-300"}>
       
       {/* ======================================================================
@@ -916,63 +1098,353 @@ export const App: React.FC = () => {
           )}
 
           {/* SUPER ADMIN CONSOLE PANELS */}
-          {stats?.view === 'SUPER_ADMIN' && (
+          {user.role === 'Super Admin' && (
             <div className="flex flex-col gap-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="glass-panel p-6 rounded-2xl border border-white/5 flex items-center justify-between">
+              {/* Header metrics */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="glass-panel p-5 rounded-2xl border border-white/5 flex items-center justify-between">
                   <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Registered Tenants</span>
-                    <p className="text-3xl font-extrabold text-white mt-2">{stats.stats.totalTenants}</p>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Societies</span>
+                    <p className="text-3xl font-extrabold text-white mt-1.5">{superAdminData.tenants.length}</p>
                   </div>
-                  <Landmark className="w-10 h-10 text-emerald-400 opacity-60" />
+                  <Building2 className="w-8 h-8 text-emerald-400 opacity-60" />
                 </div>
-                <div className="glass-panel p-6 rounded-2xl border border-white/5 flex items-center justify-between">
+                <div className="glass-panel p-5 rounded-2xl border border-white/5 flex items-center justify-between">
                   <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Active SaaS Systems</span>
-                    <p className="text-3xl font-extrabold text-emerald-400 mt-2">{stats.stats.activeTenants}</p>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Platform Users</span>
+                    <p className="text-3xl font-extrabold text-cyan-400 mt-1.5">{superAdminData.users.length}</p>
                   </div>
-                  <CheckCircle2 className="w-10 h-10 text-emerald-400 opacity-60" />
+                  <Users className="w-8 h-8 text-cyan-400 opacity-60" />
                 </div>
-                <div className="glass-panel p-6 rounded-2xl border border-white/5 flex items-center justify-between">
+                <div className="glass-panel p-5 rounded-2xl border border-white/5 flex items-center justify-between">
                   <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Plan Subscriptions Tier</span>
-                    <p className="text-lg font-extrabold text-white mt-2">BASIC / ENTERPRISE</p>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Active Staff</span>
+                    <p className="text-3xl font-extrabold text-pink-400 mt-1.5">{superAdminData.staff.length}</p>
                   </div>
-                  <DollarSign className="w-10 h-10 text-cyan-400 opacity-60" />
+                  <UserCheck className="w-8 h-8 text-pink-400 opacity-60" />
+                </div>
+                <div className="glass-panel p-5 rounded-2xl border border-white/5 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Visitor Entries</span>
+                    <p className="text-3xl font-extrabold text-amber-400 mt-1.5">{superAdminData.visitorLogs.length}</p>
+                  </div>
+                  <Shield className="w-8 h-8 text-amber-400 opacity-60" />
                 </div>
               </div>
 
-              {/* Tenants list table */}
-              <div className="glass-panel rounded-2xl border border-white/5 p-6 mt-4">
-                <h3 className="text-lg font-bold text-white mb-4">SaaS Multi-Tenant Database Allocation</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm text-slate-300">
-                    <thead>
-                      <tr className="border-b border-white/5 text-slate-400 text-xs font-bold uppercase tracking-wider">
-                        <th className="py-3 px-4">Tenant Name</th>
-                        <th className="py-3 px-4">URL Subdomain slug</th>
-                        <th className="py-3 px-4">Primary Theme color</th>
-                        <th className="py-3 px-4">SaaS Service Status</th>
-                        <th className="py-3 px-4">Database Bounds</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {stats.tenants?.map((t: any) => (
-                        <tr key={t.id} className="hover:bg-white/5 transition-all">
-                          <td className="py-4 px-4 font-bold text-white">{t.name}</td>
-                          <td className="py-4 px-4 text-emerald-400 font-medium">/{t.slug}</td>
-                          <td className="py-4 px-4"><span className="inline-block w-4 h-4 rounded-full border border-white/20" style={{ backgroundColor: t.themePrimary }} /></td>
-                          <td className="py-4 px-4">
-                            <span className="inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                              ACTIVE
-                            </span>
-                          </td>
-                          <td className="py-4 px-4 text-xs font-mono text-slate-500">{t.id}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              {/* Filters Panel */}
+              <div className="glass-panel p-5 rounded-2xl border border-white/5 flex flex-col md:flex-row gap-4 items-end">
+                <div className="flex-1 w-full">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Filter by Society</label>
+                  <select
+                    value={superAdminFilters.tenantId}
+                    onChange={(e) => setSuperAdminFilters(prev => ({ ...prev, tenantId: e.target.value }))}
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none text-white focus:border-emerald-500/50"
+                  >
+                    <option value="">All Societies / Tenants</option>
+                    {superAdminData.tenants.map((t: any) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
                 </div>
+                <div className="w-full md:w-44">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Start Date</label>
+                  <input
+                    type="date"
+                    value={superAdminFilters.startDate}
+                    onChange={(e) => setSuperAdminFilters(prev => ({ ...prev, startDate: e.target.value }))}
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none text-white focus:border-emerald-500/50"
+                  />
+                </div>
+                <div className="w-full md:w-44">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">End Date</label>
+                  <input
+                    type="date"
+                    value={superAdminFilters.endDate}
+                    onChange={(e) => setSuperAdminFilters(prev => ({ ...prev, endDate: e.target.value }))}
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none text-white focus:border-emerald-500/50"
+                  />
+                </div>
+                {(superAdminFilters.tenantId || superAdminFilters.startDate || superAdminFilters.endDate) && (
+                  <button
+                    onClick={() => setSuperAdminFilters({ tenantId: '', startDate: '', endDate: '' })}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 rounded-xl transition-all w-full md:w-auto"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* Sub-Tabs Selector */}
+              <div className="flex gap-2 border-b border-white/5 pb-px overflow-x-auto">
+                <button
+                  onClick={() => setSuperAdminActiveTab('societies')}
+                  className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap ${
+                    superAdminActiveTab === 'societies' 
+                      ? 'text-emerald-400 border-emerald-500 bg-emerald-500/5' 
+                      : 'text-slate-400 border-transparent hover:text-slate-200'
+                  }`}
+                >
+                  🏢 Societies ({superAdminData.tenants.length})
+                </button>
+                <button
+                  onClick={() => setSuperAdminActiveTab('users')}
+                  className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap ${
+                    superAdminActiveTab === 'users' 
+                      ? 'text-cyan-400 border-cyan-500 bg-cyan-500/5' 
+                      : 'text-slate-400 border-transparent hover:text-slate-200'
+                  }`}
+                >
+                  👥 Users ({superAdminData.users.length})
+                </button>
+                <button
+                  onClick={() => setSuperAdminActiveTab('staff')}
+                  className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap ${
+                    superAdminActiveTab === 'staff' 
+                      ? 'text-pink-400 border-pink-500 bg-pink-500/5' 
+                      : 'text-slate-400 border-transparent hover:text-slate-200'
+                  }`}
+                >
+                  🛠️ Service Staff ({superAdminData.staff.length})
+                </button>
+                <button
+                  onClick={() => setSuperAdminActiveTab('visitorLogs')}
+                  className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap ${
+                    superAdminActiveTab === 'visitorLogs' 
+                      ? 'text-amber-400 border-amber-500 bg-amber-500/5' 
+                      : 'text-slate-400 border-transparent hover:text-slate-200'
+                  }`}
+                >
+                  📋 Visitor Log Book ({superAdminData.visitorLogs.length})
+                </button>
+              </div>
+
+              {/* Sub-tab view container */}
+              <div className="glass-panel rounded-2xl border border-white/5 p-6">
+                
+                {/* 1. SOCIETIES TAB */}
+                {superAdminActiveTab === 'societies' && (
+                  <div>
+                    <h3 className="text-md font-bold text-white mb-4">SaaS Multi-Tenant Database Allocation</h3>
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-left text-xs text-slate-300">
+                        <thead>
+                          <tr className="border-b border-white/5 text-slate-400 font-bold uppercase tracking-wider">
+                            <th className="py-3 px-4">Tenant Name</th>
+                            <th className="py-3 px-4">URL Subdomain slug</th>
+                            <th className="py-3 px-4">Theme color</th>
+                            <th className="py-3 px-4">SaaS Service Status</th>
+                            <th className="py-3 px-4">Database Bounds</th>
+                            <th className="py-3 px-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {superAdminData.tenants.map((t: any) => (
+                            <tr key={t.id} className="hover:bg-white/5 transition-all text-xs">
+                              <td className="py-4 px-4 font-bold text-white">{t.name}</td>
+                              <td className="py-4 px-4 text-emerald-400 font-medium">/{t.slug}</td>
+                              <td className="py-4 px-4">
+                                <span className="inline-block w-4 h-4 rounded-full border border-white/20" style={{ backgroundColor: t.themePrimary }} />
+                              </td>
+                              <td className="py-4 px-4">
+                                <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                                  t.isActive !== false ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                }`}>
+                                  {t.isActive !== false ? 'Active' : 'Suspended'}
+                                </span>
+                              </td>
+                              <td className="py-4 px-4 font-mono text-slate-500">{t.id}</td>
+                              <td className="py-4 px-4 text-right">
+                                <div className="flex justify-end gap-2">
+                                  <button
+                                    onClick={() => handleToggleTenantStatus(t.id, t.isActive !== false)}
+                                    className={`px-2.5 py-1 rounded-lg font-bold text-[10px] uppercase transition-all ${
+                                      t.isActive !== false 
+                                        ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20' 
+                                        : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20'
+                                    }`}
+                                  >
+                                    {t.isActive !== false ? 'Suspend' : 'Activate'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteTenant(t.id)}
+                                    className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg font-bold text-[10px] uppercase transition-all"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Mobile cards */}
+                    <div className="md:hidden flex flex-col gap-4">
+                      {superAdminData.tenants.map((t: any) => (
+                        <div key={t.id} className="p-4 bg-white/5 border border-white/5 rounded-2xl flex flex-col gap-3">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-extrabold text-white text-sm">{t.name}</h4>
+                              <p className="text-[10px] text-slate-400 mt-0.5">/{t.slug}</p>
+                            </div>
+                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                              t.isActive !== false ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                            }`}>
+                              {t.isActive !== false ? 'Active' : 'Suspended'}
+                            </span>
+                          </div>
+                          <div className="flex justify-end gap-2 pt-2 border-t border-white/5">
+                            <button
+                              onClick={() => handleToggleTenantStatus(t.id, t.isActive !== false)}
+                              className={`px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase transition-all ${
+                                t.isActive !== false 
+                                  ? 'bg-red-500/15 hover:bg-red-500/30 text-red-400 border border-red-500/20' 
+                                  : 'bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/20'
+                              }`}
+                            >
+                              {t.isActive !== false ? 'Suspend' : 'Activate'}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteTenant(t.id)}
+                              className="px-3 py-1.5 bg-rose-500/15 hover:bg-rose-500/30 text-rose-400 border border-rose-500/20 rounded-xl font-bold text-[10px] uppercase transition-all"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. USERS TAB */}
+                {superAdminActiveTab === 'users' && (
+                  <div>
+                    <h3 className="text-md font-bold text-white mb-4">Platform Identity & User Accounts</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs text-slate-300">
+                        <thead>
+                          <tr className="border-b border-white/5 text-slate-400 font-bold uppercase tracking-wider">
+                            <th className="py-3 px-4">User Name</th>
+                            <th className="py-3 px-4">Email ID</th>
+                            <th className="py-3 px-4">Role</th>
+                            <th className="py-3 px-4">Associated Society</th>
+                            <th className="py-3 px-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {superAdminData.users.map((u: any) => (
+                            <tr key={u.id} className="hover:bg-white/5 transition-all">
+                              <td className="py-4 px-4 font-bold text-white">{u.firstName} {u.lastName}</td>
+                              <td className="py-4 px-4 text-slate-400">{u.email}</td>
+                              <td className="py-4 px-4">
+                                <span className="inline-block px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-bold text-[9px] uppercase tracking-wider">
+                                  {u.role?.name || 'User'}
+                                </span>
+                              </td>
+                              <td className="py-4 px-4 text-emerald-400 font-semibold">{u.tenant?.name || 'Global SaaS Platform'}</td>
+                              <td className="py-4 px-4 text-right">
+                                {u.role?.name !== 'Super Admin' && (
+                                  <button
+                                    onClick={() => handleDeleteUser(u.id)}
+                                    className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg font-bold text-[10px] uppercase transition-all"
+                                  >
+                                    Delete
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. STAFF TAB */}
+                {superAdminActiveTab === 'staff' && (
+                  <div>
+                    <h3 className="text-md font-bold text-white mb-4">Onboarded Service Staff Registry</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs text-slate-300">
+                        <thead>
+                          <tr className="border-b border-white/5 text-slate-400 font-bold uppercase tracking-wider">
+                            <th className="py-3 px-4">Staff Name</th>
+                            <th className="py-3 px-4">Phone</th>
+                            <th className="py-3 px-4">Designation</th>
+                            <th className="py-3 px-4">Society Area</th>
+                            <th className="py-3 px-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {superAdminData.staff.map((s: any) => (
+                            <tr key={s.id} className="hover:bg-white/5 transition-all">
+                              <td className="py-4 px-4 font-bold text-white">{s.firstName} {s.lastName}</td>
+                              <td className="py-4 px-4 text-slate-400">{s.phoneNumber}</td>
+                              <td className="py-4 px-4">
+                                <span className="inline-block px-2 py-0.5 rounded bg-pink-500/10 text-pink-400 border border-pink-500/20 font-bold text-[9px] uppercase tracking-wider">
+                                  {s.type}
+                                </span>
+                              </td>
+                              <td className="py-4 px-4 text-emerald-400 font-semibold">{s.tenant?.name || 'Society Office'}</td>
+                              <td className="py-4 px-4 text-right">
+                                <button
+                                  onClick={() => handleDeleteStaff(s.id)}
+                                  className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg font-bold text-[10px] uppercase transition-all"
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. VISITOR LOGS TAB */}
+                {superAdminActiveTab === 'visitorLogs' && (
+                  <div>
+                    <h3 className="text-md font-bold text-white mb-4">Global Security Visitor Logs</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs text-slate-300">
+                        <thead>
+                          <tr className="border-b border-white/5 text-slate-400 font-bold uppercase tracking-wider">
+                            <th className="py-3 px-4">Guest Name</th>
+                            <th className="py-3 px-4">Type</th>
+                            <th className="py-3 px-4">Destination Flat</th>
+                            <th className="py-3 px-4">Check-In Time</th>
+                            <th className="py-3 px-4">Check-Out Time</th>
+                            <th className="py-3 px-4">Society</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {superAdminData.visitorLogs.map((l: any) => (
+                            <tr key={l.id} className="hover:bg-white/5 transition-all text-xs">
+                              <td className="py-4 px-4 font-bold text-white">{l.name}</td>
+                              <td className="py-4 px-4">
+                                <span className="inline-block px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold text-[9px] uppercase tracking-wider">
+                                  {l.visitorType}
+                                </span>
+                              </td>
+                              <td className="py-4 px-4">Flat {l.flat?.number || 'N/A'} ({l.flat?.wing?.name || 'Wing'})</td>
+                              <td className="py-4 px-4 text-emerald-400 font-semibold">{new Date(l.checkedInAt).toLocaleString()}</td>
+                              <td className="py-4 px-4 text-slate-400">
+                                {l.checkedOutAt ? new Date(l.checkedOutAt).toLocaleString() : (
+                                  <span className="text-[10px] text-pink-400 font-bold uppercase tracking-wider bg-pink-500/10 px-2 py-0.5 rounded border border-pink-500/10">Inside Complex</span>
+                                )}
+                              </td>
+                              <td className="py-4 px-4 text-cyan-400 font-semibold">{l.tenant?.name || 'Society Board'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
               </div>
             </div>
           )}
@@ -1146,90 +1618,398 @@ export const App: React.FC = () => {
 
           {/* GATE GUARD CONSOLE APP VIEW */}
           {user.role === 'Security Guard' && (
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-6 font-sans">
               
               {/* Emergency SOS Alarm Trigger panel */}
-              <div className="glass-panel p-6 rounded-3xl border border-red-500/20 text-center flex flex-col justify-center items-center gap-4 bg-gradient-to-b from-slate-900/60 to-red-950/10">
-                <div className="p-4 bg-red-600 hover:bg-red-500 rounded-full cursor-pointer shadow-neon-cyan animate-bounce" onClick={() => setSosActive(true)}>
-                  <ShieldAlert className="w-12 h-12 text-white" />
+              <div className="glass-panel p-4 rounded-3xl border border-red-500/20 flex items-center justify-between gap-4 bg-gradient-to-r from-red-950/10 to-slate-900/40">
+                <div className="flex items-center gap-3">
+                  <div 
+                    onClick={() => {
+                      setSosActive(!sosActive);
+                    }}
+                    className={`p-3 rounded-full cursor-pointer transition-all duration-300 ${
+                      sosActive ? 'bg-red-500 animate-ping' : 'bg-red-600 hover:bg-red-500'
+                    }`}
+                  >
+                    <ShieldAlert className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-red-500">Gate Alarm SOS Actuator</h3>
+                    <p className="text-[10px] text-slate-400">Click icon to trigger society panic state</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-xl font-bold text-red-500">EMERGENCY SOS SIREN ACTUATOR</h3>
-                  <p className="text-xs text-slate-400 mt-1">Click above in case of fire, threat, or medical emergency. Alerts all resident devices instantly.</p>
-                </div>
+                {sosActive && (
+                  <button 
+                    onClick={() => setSosActive(false)}
+                    className="px-4 py-2 bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs font-bold rounded-xl"
+                  >
+                    Deactivate
+                  </button>
+                )}
               </div>
 
-              {/* QR Gate Checker scanner */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="glass-panel p-6 rounded-2xl border border-white/5">
-                  <h3 className="text-lg font-bold text-white mb-3">Gate QR Entry Scanner Simulator</h3>
-                  <p className="text-xs text-slate-400 mb-4">Input pre-approved pass code to verify visitor identity.</p>
+              {/* Simplified Tabs for Non-Technical Guard */}
+              <div className="grid grid-cols-3 gap-2 bg-slate-950 p-1.5 rounded-2xl border border-white/5">
+                <button
+                  type="button"
+                  onClick={() => setGuardConsoleTab('verify')}
+                  className={`py-3 px-2 rounded-xl text-xs font-bold transition-all duration-200 flex flex-col items-center gap-1.5 ${
+                    guardConsoleTab === 'verify'
+                      ? 'bg-gradient-to-tr from-emerald-500 to-teal-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                  }`}
+                >
+                  <QrCode className="w-5 h-5" />
+                  <span>Verify Pass</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGuardConsoleTab('walkin')}
+                  className={`py-3 px-2 rounded-xl text-xs font-bold transition-all duration-200 flex flex-col items-center gap-1.5 ${
+                    guardConsoleTab === 'walkin'
+                      ? 'bg-gradient-to-tr from-cyan-500 to-blue-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                  }`}
+                >
+                  <Plus className="w-5 h-5" />
+                  <span>New Visitor</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGuardConsoleTab('logs')}
+                  className={`py-3 px-2 rounded-xl text-xs font-bold transition-all duration-200 flex flex-col items-center gap-1.5 ${
+                    guardConsoleTab === 'logs'
+                      ? 'bg-gradient-to-tr from-purple-500 to-indigo-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                  }`}
+                >
+                  <ClipboardList className="w-5 h-5" />
+                  <span>Logs ({visitorLogs.filter(l => !l.checkedOutAt).length})</span>
+                </button>
+              </div>
 
-                  <div className="flex gap-2">
+              {/* TAB 1: VERIFY PASS */}
+              {guardConsoleTab === 'verify' && (
+                <div className="glass-panel p-6 rounded-3xl border border-white/5 flex flex-col gap-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-white">Verify Guest QR Passcode</h3>
+                    <p className="text-xs text-slate-400 mt-1">Type the code shared by the guest to verify pre-approval status.</p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-3 mt-2">
                     <input
                       type="text"
-                      placeholder="e.g. PASS-LOTA-RAM2"
+                      placeholder="Enter Passcode (e.g. PASS-LOTA-RAM2)"
                       value={qrCodeInput}
-                      onChange={(e) => setQrCodeInput(e.target.value)}
-                      className="flex-1 bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-slate-200"
+                      onChange={(e) => setQrCodeInput(e.target.value.toUpperCase())}
+                      className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold tracking-wider placeholder-slate-600 text-white focus:outline-none focus:border-emerald-500/50"
                     />
-                    <button onClick={handleScanPass} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl text-xs font-bold shadow-md">
-                      Scan Pass
+                    <button 
+                      onClick={handleScanPass} 
+                      className="sm:px-6 py-3 bg-gradient-to-tr from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-xl text-sm font-bold shadow-md transition-all flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Verify Code</span>
                     </button>
                   </div>
 
                   {scannerError && (
-                    <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-lg flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4" />
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
                       <span>{scannerError}</span>
                     </div>
                   )}
 
                   {/* Render verified guest pass profile */}
                   {scannedPass && (
-                    <div className="mt-6 p-4 bg-emerald-950/20 border border-emerald-500/20 rounded-xl">
-                      <div className="flex justify-between items-center pb-3 border-b border-white/5">
+                    <div className="mt-4 p-5 bg-emerald-950/20 border border-emerald-500/30 rounded-2xl flex flex-col gap-4">
+                      <div className="flex justify-between items-start pb-4 border-b border-white/5">
                         <div>
-                          <h4 className="font-bold text-white text-sm">{scannedPass.name}</h4>
-                          <span className="text-[10px] text-slate-400">{scannedPass.phoneNumber}</span>
+                          <h4 className="font-extrabold text-white text-lg">{scannedPass.name}</h4>
+                          <p className="text-xs text-slate-400 mt-0.5">📞 {scannedPass.phoneNumber}</p>
                         </div>
-                        <span className="text-[10px] font-bold bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                        <span className="text-xs font-extrabold bg-emerald-500/15 text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/20">
                           {scannedPass.visitorType}
                         </span>
                       </div>
                       
-                      <div className="flex flex-col gap-2 mt-3 text-xs text-slate-300">
-                        <p><strong>Flat Bound:</strong> {scannedPass?.resident?.flat?.number || 'N/A'} (Resident pre-approved)</p>
-                        {scannedPass.vehicleNumber && <p><strong>Vehicle Plaque:</strong> {scannedPass.vehicleNumber}</p>}
-                        {scannedPass.company && <p><strong>Provider:</strong> {scannedPass.company}</p>}
+                      <div className="grid grid-cols-2 gap-4 text-xs text-slate-300">
+                        <div className="p-3 bg-white/5 rounded-xl">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Target Flat</span>
+                          <span className="text-sm font-bold text-emerald-400 block mt-1">{scannedPass?.resident?.flat?.number || 'A-101'}</span>
+                        </div>
+                        <div className="p-3 bg-white/5 rounded-xl">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Vehicle Plaque</span>
+                          <span className="text-sm font-bold text-white block mt-1">{scannedPass.vehicleNumber || 'None'}</span>
+                        </div>
+                        <div className="p-3 bg-white/5 rounded-xl">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Service Provider</span>
+                          <span className="text-sm font-bold text-white block mt-1">{scannedPass.company || 'Personal Guest'}</span>
+                        </div>
+                        <div className="p-3 bg-white/5 rounded-xl">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Verification Mode</span>
+                          <span className="text-sm font-bold text-emerald-400 block mt-1">Pre-Approved</span>
+                        </div>
                       </div>
 
                       <button
-                        onClick={() => handleCheckInGuest(scannedPass.id)}
-                        className="w-full mt-4 bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-2.5 rounded-xl text-xs shadow-md"
+                        onClick={() => {
+                          handleCheckInGuest(scannedPass.id);
+                          setQrCodeInput('');
+                          setScannedPass(null);
+                        }}
+                        className="w-full mt-2 bg-gradient-to-tr from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-extrabold py-3.5 rounded-xl text-sm shadow-md transition-all flex items-center justify-center gap-2"
                       >
-                        Approve and Check In Entry
+                        <CheckCircle2 className="w-5 h-5" />
+                        <span>APPROVE & CHECK IN ENTRY</span>
                       </button>
                     </div>
                   )}
                 </div>
+              )}
 
-                {/* Registry overview */}
-                <div className="glass-panel p-6 rounded-2xl border border-white/5 flex flex-col">
-                  <h3 className="text-lg font-bold text-white mb-2">Live Gate Activity Logs</h3>
-                  
-                  {/* Quick checkout logs search bar */}
-                  <div className="mb-3">
+              {/* TAB 2: Walk-In / Delivery */}
+              {guardConsoleTab === 'walkin' && (
+                <div className="glass-panel p-6 rounded-3xl border border-white/5 flex flex-col gap-6">
+                  <div>
+                    <h3 className="text-xl font-bold text-white">Log Walk-In Entry / Delivery</h3>
+                    <p className="text-xs text-slate-400 mt-1">Register walk-in visitors, delivery riders, and cabs instantly. Tap a brand below for fast logging.</p>
+                  </div>
+
+                  {/* Quick Delivery Boy Chips */}
+                  <div>
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">⚡ Quick Brand Autofill</span>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { name: 'Zomato', type: 'DELIVERY', color: 'border-rose-500/20 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20' },
+                        { name: 'Swiggy', type: 'DELIVERY', color: 'border-orange-500/20 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20' },
+                        { name: 'Uber', type: 'CAB', color: 'border-slate-500/20 bg-slate-500/10 text-slate-300 hover:bg-slate-500/20' },
+                        { name: 'Ola', type: 'CAB', color: 'border-cyan-500/20 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20' },
+                        { name: 'Amazon', type: 'DELIVERY', color: 'border-yellow-500/20 bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20' },
+                      ].map((brand) => (
+                        <button
+                          key={brand.name}
+                          type="button"
+                          onClick={() => {
+                            setManualVisitor({
+                              ...manualVisitor,
+                              name: `${brand.name} Rider`,
+                              visitorType: brand.type,
+                              company: brand.name,
+                              purpose: `${brand.name} Order Delivery`
+                            });
+                          }}
+                          className={`px-4 py-2.5 rounded-xl border text-xs font-bold tracking-wide transition-all ${brand.color}`}
+                        >
+                          {brand.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleManualEntrySubmit} className="flex flex-col gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Visitor Full Name</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Ramesh Patel"
+                          value={manualVisitor.name}
+                          onChange={(e) => setManualVisitor({ ...manualVisitor, name: e.target.value })}
+                          className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Phone Number</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="9876543210"
+                          value={manualVisitor.phoneNumber}
+                          onChange={(e) => setManualVisitor({ ...manualVisitor, phoneNumber: e.target.value })}
+                          className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Visitor Type</label>
+                          <select
+                            value={manualVisitor.visitorType}
+                            onChange={(e) => setManualVisitor({ ...manualVisitor, visitorType: e.target.value })}
+                            className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none"
+                          >
+                            <option value="DELIVERY">DELIVERY</option>
+                            <option value="CAB">CAB</option>
+                            <option value="GUEST">GUEST</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Brand / Company</label>
+                          <input
+                            type="text"
+                            placeholder="Zomato"
+                            value={manualVisitor.company}
+                            onChange={(e) => setManualVisitor({ ...manualVisitor, company: e.target.value })}
+                            className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="relative">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Destination Flat & Owner</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Search flat number or owner name..."
+                            value={manualFlatSearch}
+                            onFocus={() => setIsManualFlatDropdownOpen(true)}
+                            onChange={(e) => {
+                              setManualFlatSearch(e.target.value);
+                              setIsManualFlatDropdownOpen(true);
+                            }}
+                            className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50"
+                          />
+                          {selectedManualFlat && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedManualFlat(null);
+                                setManualFlatSearch('');
+                                setManualVisitor({ ...manualVisitor, flatId: '' });
+                                setOwnerVerification('IDLE');
+                              }}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs font-bold"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+
+                        {isManualFlatDropdownOpen && (
+                          <div className="absolute z-50 w-full mt-1 bg-slate-950 border border-white/10 rounded-xl max-h-48 overflow-y-auto shadow-2xl divide-y divide-white/5">
+                            {flats
+                              .filter((f: any) => {
+                                const resident = f.residents?.[0];
+                                const residentName = resident ? `${resident.user.firstName} ${resident.user.lastName}`.toLowerCase() : '';
+                                const flatNum = f.number.toLowerCase();
+                                const query = manualFlatSearch.toLowerCase();
+                                return flatNum.includes(query) || residentName.includes(query);
+                              })
+                              .map((f: any) => {
+                                const resident = f.residents?.[0];
+                                const nameStr = resident ? `${resident.user.firstName} ${resident.user.lastName} (${resident.ownershipStatus})` : '';
+                                return (
+                                  <div
+                                    key={f.id}
+                                    onClick={() => {
+                                      setSelectedManualFlat(f);
+                                      setManualFlatSearch(nameStr ? `${f.number} - ${nameStr}` : f.number);
+                                      setManualVisitor({ ...manualVisitor, flatId: f.id });
+                                      setIsManualFlatDropdownOpen(false);
+                                      setManualError(null);
+                                      setOwnerVerification('IDLE');
+                                    }}
+                                    className="px-3 py-2 hover:bg-white/5 cursor-pointer text-xs text-slate-200 flex justify-between items-center transition-all"
+                                  >
+                                    <span className="font-bold text-white">{f.number}</span>
+                                    <span className="text-[10px] text-slate-400">{nameStr || 'Vacant Flat'}</span>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Verify with Owner</label>
+                        {selectedManualFlat && selectedManualFlat.residents && selectedManualFlat.residents.length > 0 ? (
+                          ownerVerification === 'IDLE' ? (
+                            <a
+                              href={`tel:${selectedManualFlat.residents[0].user.phoneNumber}`}
+                              onClick={() => {
+                                setOwnerVerification('PENDING');
+                                setVerificationFlat(selectedManualFlat.number);
+                                setTimeout(() => {
+                                  setOwnerVerification('APPROVED');
+                                }, 2000);
+                              }}
+                              className="w-full bg-cyan-600/20 border border-cyan-500/30 hover:bg-cyan-600/35 text-cyan-400 font-extrabold py-3 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 text-center shadow-sm"
+                            >
+                              📞 Dial Owner to Verify
+                            </a>
+                          ) : ownerVerification === 'PENDING' ? (
+                            <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs rounded-xl flex items-center justify-center gap-2 font-bold animate-pulse">
+                              <span>Dialing flat {verificationFlat} occupant...</span>
+                            </div>
+                          ) : (
+                            <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs rounded-xl flex items-center justify-center gap-1.5 font-extrabold shadow-sm">
+                              <span>✅ Approved by Owner of {verificationFlat}</span>
+                            </div>
+                          )
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            className="w-full bg-slate-900 border border-white/5 text-slate-500 font-bold py-3 rounded-xl text-xs cursor-not-allowed flex items-center justify-center gap-1.5"
+                          >
+                            ⚠️ No Resident Onboarded
+                          </button>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-transparent mb-1.5">Submit</label>
+                        <button
+                          type="submit"
+                          disabled={manualLoading || ownerVerification !== 'APPROVED'}
+                          className="w-full bg-gradient-to-tr from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 disabled:opacity-40 disabled:hover:from-emerald-500 disabled:hover:to-teal-600 text-white font-extrabold py-3 rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-1.5"
+                        >
+                          {manualLoading ? 'Checking in...' : 'APPROVE & CHECK IN'}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+
+                  {manualError && (
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{manualError}</span>
+                    </div>
+                  )}
+                  {manualSuccess && (
+                    <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-xl flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>{manualSuccess}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 3: GATE LOGS */}
+              {guardConsoleTab === 'logs' && (
+                <div className="glass-panel p-6 rounded-3xl border border-white/5 flex flex-col gap-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-white">Live Gate Activity Logs</h3>
+                    <p className="text-xs text-slate-400 mt-1">Search logs by flat number or visitor name to checkout departing guests.</p>
+                  </div>
+
+                  <div className="relative">
                     <input
                       type="text"
-                      placeholder="Quick exit search (flat, name, rider)..."
+                      placeholder="Type flat number, visitor name, or delivery brand to search..."
                       value={logSearchQuery}
                       onChange={(e) => setLogSearchQuery(e.target.value)}
-                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-1.5 text-[11px] text-slate-200 focus:outline-none focus:border-cyan-500/50"
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50"
                     />
                   </div>
 
-                  <div className="flex flex-col gap-3 mt-1 max-h-60 overflow-y-auto flex-1">
+                  <div className="flex flex-col gap-3 mt-2 max-h-[50vh] overflow-y-auto divide-y divide-white/5">
                     {visitorLogs
                       .filter((log: any) => {
                         if (!logSearchQuery.trim()) return true;
@@ -1241,243 +2021,33 @@ export const App: React.FC = () => {
                         );
                       })
                       .map((log: any) => (
-                        <div key={log.id} className="flex justify-between items-center p-3 bg-white/5 border border-white/5 rounded-xl text-xs">
+                        <div key={log.id} className="flex justify-between items-center py-4 text-sm first:pt-0">
                           <div>
-                            <span className="font-bold text-white block">{log.visitor.name}</span>
-                            <span className="text-[10px] text-slate-500">Target Flat: {log.flat.number}</span>
+                            <span className="font-extrabold text-white block">{log.visitor.name}</span>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[10px] text-slate-400 font-bold bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                                Flat {log.flat.number}
+                              </span>
+                              <span className="text-[10px] text-slate-500">
+                                In: {new Date(log.checkedInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
                           </div>
                           {log.checkedOutAt ? (
-                            <span className="text-slate-500 font-semibold">Departed</span>
+                            <span className="text-slate-500 text-xs font-semibold px-2">Checked Out</span>
                           ) : (
                             <button
                               onClick={() => handleCheckOutGuest(log.id)}
-                              className="px-3 py-1 bg-rose-500/15 border border-rose-500/20 hover:bg-rose-500/30 text-rose-400 rounded-lg text-[10px] font-bold"
+                              className="px-4 py-2 bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/30 text-rose-400 rounded-xl text-xs font-bold transition-all"
                             >
-                              Mark Out
+                              Check Out
                             </button>
                           )}
                         </div>
                       ))}
                   </div>
                 </div>
-              </div>
-
-              {/* Row 2: Walk-In Manual Entry & Delivery Quick-Check */}
-              <div className="glass-panel p-6 rounded-2xl border border-white/5 bg-slate-900/10">
-                <h3 className="text-lg font-bold text-white mb-2">Walk-In Manual Entry & Delivery Quick-Check</h3>
-                <p className="text-xs text-slate-400 mb-4">Log entries manually for unregistered visitors, delivery riders, and cabs. Verify identity directly with occupants.</p>
-
-                {/* Quick Delivery Boy Chips */}
-                <div className="mb-5">
-                  <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">⚡ Quick Autofill Delivery Brands</span>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { name: 'Zomato', type: 'DELIVERY', color: 'border-rose-500/20 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20' },
-                      { name: 'Swiggy', type: 'DELIVERY', color: 'border-orange-500/20 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20' },
-                      { name: 'Uber', type: 'CAB', color: 'border-slate-500/20 bg-slate-500/10 text-slate-300 hover:bg-slate-500/20' },
-                      { name: 'Ola', type: 'CAB', color: 'border-cyan-500/20 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20' },
-                      { name: 'Amazon', type: 'DELIVERY', color: 'border-yellow-500/20 bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20' },
-                    ].map((brand) => (
-                      <button
-                        key={brand.name}
-                        type="button"
-                        onClick={() => {
-                          setManualVisitor({
-                            ...manualVisitor,
-                            name: `${brand.name} Rider`,
-                            visitorType: brand.type,
-                            company: brand.name,
-                            purpose: `${brand.name} Order Delivery`
-                          });
-                        }}
-                        className={`px-3 py-1.5 rounded-xl border text-[11px] font-bold tracking-wide transition-all ${brand.color}`}
-                      >
-                        {brand.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <form onSubmit={handleManualEntrySubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="flex flex-col gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Visitor Full Name</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. Ramesh Patel"
-                        value={manualVisitor.name}
-                        onChange={(e) => setManualVisitor({ ...manualVisitor, name: e.target.value })}
-                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Phone Number</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. 9876543210"
-                        value={manualVisitor.phoneNumber}
-                        onChange={(e) => setManualVisitor({ ...manualVisitor, phoneNumber: e.target.value })}
-                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-3">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Visitor Type</label>
-                        <select
-                          value={manualVisitor.visitorType}
-                          onChange={(e) => setManualVisitor({ ...manualVisitor, visitorType: e.target.value })}
-                          className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none"
-                        >
-                          <option value="DELIVERY">DELIVERY</option>
-                          <option value="CAB">CAB</option>
-                          <option value="GUEST">GUEST</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Company / Brand</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Zomato"
-                          value={manualVisitor.company}
-                          onChange={(e) => setManualVisitor({ ...manualVisitor, company: e.target.value })}
-                          className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none"
-                        />
-                      </div>
-                    </div>
-                    <div className="relative">
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Destination Flat & Owner</label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          placeholder="Search flat number or owner name..."
-                          value={manualFlatSearch}
-                          onFocus={() => setIsManualFlatDropdownOpen(true)}
-                          onChange={(e) => {
-                            setManualFlatSearch(e.target.value);
-                            setIsManualFlatDropdownOpen(true);
-                          }}
-                          className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50"
-                        />
-                        {selectedManualFlat && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedManualFlat(null);
-                              setManualFlatSearch('');
-                              setManualVisitor({ ...manualVisitor, flatId: '' });
-                              setOwnerVerification('IDLE');
-                            }}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs font-bold"
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-
-                      {isManualFlatDropdownOpen && (
-                        <div className="absolute z-50 w-full mt-1 bg-slate-950 border border-white/10 rounded-xl max-h-48 overflow-y-auto shadow-2xl divide-y divide-white/5">
-                          {flats
-                            .filter((f: any) => {
-                              const resident = f.residents?.[0];
-                              const residentName = resident ? `${resident.user.firstName} ${resident.user.lastName}`.toLowerCase() : '';
-                              const flatNum = f.number.toLowerCase();
-                              const query = manualFlatSearch.toLowerCase();
-                              return flatNum.includes(query) || residentName.includes(query);
-                            })
-                            .map((f: any) => {
-                              const resident = f.residents?.[0];
-                              const nameStr = resident ? `${resident.user.firstName} ${resident.user.lastName} (${resident.ownershipStatus})` : '';
-                              return (
-                                <div
-                                  key={f.id}
-                                  onClick={() => {
-                                    setSelectedManualFlat(f);
-                                    setManualFlatSearch(nameStr ? `${f.number} - ${nameStr}` : f.number);
-                                    setManualVisitor({ ...manualVisitor, flatId: f.id });
-                                    setIsManualFlatDropdownOpen(false);
-                                    setManualError(null);
-                                    setOwnerVerification('IDLE');
-                                  }}
-                                  className="px-3 py-2 hover:bg-white/5 cursor-pointer text-xs text-slate-200 flex justify-between items-center transition-all"
-                                >
-                                  <span className="font-bold text-white">{f.number}</span>
-                                  <span className="text-[10px] text-slate-400">{nameStr || 'Vacant Flat'}</span>
-                                </div>
-                              );
-                            })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col justify-between gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Verify with Owner</label>
-                      {selectedManualFlat && selectedManualFlat.residents && selectedManualFlat.residents.length > 0 ? (
-                        ownerVerification === 'IDLE' ? (
-                          <a
-                            href={`tel:${selectedManualFlat.residents[0].user.phoneNumber}`}
-                            onClick={() => {
-                              setOwnerVerification('PENDING');
-                              setVerificationFlat(selectedManualFlat.number);
-                              setTimeout(() => {
-                                setOwnerVerification('APPROVED');
-                              }, 2000);
-                            }}
-                            className="w-full bg-cyan-600/20 border border-cyan-500/30 hover:bg-cyan-600/35 text-cyan-400 font-bold py-2 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 text-center"
-                          >
-                            📞 Call Owner to Verify
-                          </a>
-                        ) : ownerVerification === 'PENDING' ? (
-                          <div className="p-2 bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs rounded-xl flex items-center justify-center gap-2 font-bold animate-pulse">
-                            <span>Calling flat {verificationFlat} occupant...</span>
-                          </div>
-                        ) : (
-                          <div className="p-2 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs rounded-xl flex items-center justify-center gap-1.5 font-extrabold shadow-sm">
-                            <span>✅ Approved by Owner of {verificationFlat}</span>
-                          </div>
-                        )
-                      ) : (
-                        <button
-                          type="button"
-                          disabled
-                          className="w-full bg-slate-900 border border-white/5 text-slate-500 font-bold py-2 rounded-xl text-xs cursor-not-allowed flex items-center justify-center gap-1.5"
-                        >
-                          ⚠️ No Resident Onboarded
-                        </button>
-                      )}
-                    </div>
-
-                    <div>
-                      <button
-                        type="submit"
-                        disabled={manualLoading || ownerVerification !== 'APPROVED'}
-                        className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-1.5"
-                      >
-                        {manualLoading ? 'Checking in...' : 'Approve & Check In'}
-                      </button>
-                    </div>
-                  </div>
-                </form>
-
-                {manualError && (
-                  <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-lg flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>{manualError}</span>
-                  </div>
-                )}
-                {manualSuccess && (
-                  <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-lg flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>{manualSuccess}</span>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
           )}
 
@@ -1582,7 +2152,8 @@ export const App: React.FC = () => {
           <div className="flex-1 glass-panel p-6 rounded-2xl border border-white/5">
             <h3 className="text-lg font-bold text-white mb-4">Society Occupants Directory</h3>
             
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-300">
                 <thead>
                   <tr className="border-b border-white/5 text-slate-400 text-xs font-bold uppercase tracking-wider">
@@ -1614,6 +2185,34 @@ export const App: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden flex flex-col gap-4">
+              {residents.map((r: any) => (
+                <div key={r.id} className="p-4 bg-white/5 border border-white/5 rounded-2xl flex flex-col gap-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-extrabold text-white text-sm">{r.user.firstName} {r.user.lastName}</h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{r.user.email}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">📞 {r.user.phoneNumber || '+91 9999911111'}</p>
+                    </div>
+                    <span className="text-[10px] font-bold bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      Flat {r.flat?.number || 'A-101'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2.5 border-t border-white/5 text-[10px]">
+                    <span className={`px-2 py-0.5 rounded font-bold uppercase ${
+                      r.ownershipStatus === 'OWNER' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-cyan-500/10 text-cyan-400'
+                    }`}>
+                      {r.ownershipStatus}
+                    </span>
+                    <span className="text-slate-400">
+                      Emergency: <strong className="text-slate-200">{r.emergencyContacts?.[0]?.name || 'Vikram Sharma'}</strong> ({r.emergencyContacts?.[0]?.relation || 'Brother'})
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -1985,7 +2584,8 @@ export const App: React.FC = () => {
           <div className="flex-1 glass-panel p-6 rounded-2xl border border-white/5">
             <h3 className="text-lg font-bold text-white mb-4">Society Staff & Security Registry</h3>
             
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-300">
                 <thead>
                   <tr className="border-b border-white/5 text-slate-400 text-xs font-bold uppercase tracking-wider">
@@ -2048,6 +2648,63 @@ export const App: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Card Roster View */}
+            <div className="md:hidden flex flex-col gap-4">
+              {staff.map((s: any) => (
+                <div key={s.id} className="p-4 bg-white/5 border border-white/5 rounded-2xl flex flex-col gap-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-extrabold text-white text-sm">{s.firstName} {s.lastName}</h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        📞 <a href={`tel:${s.phoneNumber}`} className="text-cyan-400 font-semibold">{s.phoneNumber}</a>
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-bold bg-emerald-500/15 text-emerald-400 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                      {s.type}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-400 p-2 bg-white/5 rounded-xl border border-white/5">
+                    <div>
+                      <span className="block text-[8px] font-bold uppercase tracking-wider text-slate-500">Shift</span>
+                      <strong className="text-slate-200">{s.shiftStart} - {s.shiftEnd}</strong>
+                    </div>
+                    <div>
+                      <span className="block text-[8px] font-bold uppercase tracking-wider text-slate-500">Salary</span>
+                      <strong className="text-slate-200">₹{s.salaryMonthly || 'N/A'}</strong>
+                    </div>
+                  </div>
+
+                  {s.user && (
+                    <div className="text-[10px] bg-slate-950 p-2 rounded-xl border border-white/5">
+                      <span className="block text-[8px] font-bold uppercase tracking-wider text-slate-500">System Credentials</span>
+                      <span className="block text-slate-300 font-semibold truncate mt-0.5">{s.user.email}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between items-center pt-2.5 border-t border-white/5">
+                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                      s.isActive !== false ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                    }`}>
+                      {s.isActive !== false ? 'Active' : 'Inactive'}
+                    </span>
+                    {user.role === 'Society Admin' && (
+                      <button
+                        onClick={() => handleToggleStaffActive(s.id, s.isActive !== false)}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase transition-all ${
+                          s.isActive !== false 
+                            ? 'bg-red-500/15 hover:bg-red-500/30 text-red-400 border border-red-500/20' 
+                            : 'bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/20'
+                        }`}
+                      >
+                        {s.isActive !== false ? 'Deactivate' : 'Activate'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -2425,7 +3082,8 @@ export const App: React.FC = () => {
           <div className="flex-1 glass-panel p-6 rounded-2xl border border-white/5">
             <h3 className="text-lg font-bold text-white mb-4">Society Maintenance Invoices</h3>
             
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-300">
                 <thead>
                   <tr className="border-b border-white/5 text-slate-400 text-xs font-bold uppercase tracking-wider">
@@ -2467,6 +3125,46 @@ export const App: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Card Invoices View */}
+            <div className="md:hidden flex flex-col gap-4">
+              {invoices.map((inv: any) => (
+                <div key={inv.id} className="p-4 bg-white/5 border border-white/5 rounded-2xl flex flex-col gap-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-[10px] font-mono text-slate-500 font-bold block">{inv.invoiceNumber}</span>
+                      <p className="text-xs text-slate-400 mt-1">Billed Period: <strong className="text-slate-300">{inv.billPeriodStart} to {inv.billPeriodEnd}</strong></p>
+                      <p className="text-xs text-slate-400 mt-0.5">Due Date: <span className="text-slate-300">{inv.dueDate}</span></p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-extrabold text-emerald-400 block">₹{inv.totalAmount}</span>
+                      <span className="text-[10px] font-bold bg-white/5 text-slate-300 px-2 py-0.5 rounded border border-white/5 mt-1 inline-block">
+                        Flat {inv.flat?.number || 'A-101'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2.5 border-t border-white/5">
+                    {inv.status === 'PAID' ? (
+                      <span className="inline-block px-3 py-1 rounded-xl text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        ✅ PAID
+                      </span>
+                    ) : user.role === 'Resident' ? (
+                      <button
+                        onClick={() => setSelectedInvoice(inv)}
+                        className="w-full px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all duration-200"
+                      >
+                        Pay Invoice
+                      </button>
+                    ) : (
+                      <span className="inline-block px-3 py-1 rounded-xl text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                        ⚠️ UNPAID
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -2842,6 +3540,7 @@ export const App: React.FC = () => {
 
       </div>
     </DashboardLayout>
+    </>
   );
 };
 
